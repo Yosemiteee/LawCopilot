@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LawCopilot — İndir ve 5 Dakikada Başla</title>
+  <style>
+    :root{
+      --bg:#070d1d;
+      --bg2:#0f1731;
+      --card:#121a36;
+      --line:#2f447f;
+      --text:#e8eeff;
+      --muted:#9db0ff;
+      --primary:#3d63ff;
+      --success:#19b67f;
+      --warn:#ffcc66;
+    }
+    *{box-sizing:border-box}
+    body{font-family:Inter,Arial,sans-serif;background:radial-gradient(circle at top,#101d42 0%,var(--bg) 42%);color:var(--text);margin:0;line-height:1.5}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .hero{padding:28px 0 16px}
+    h1,h2,h3{margin:0 0 10px}
+    h1{font-size:42px;line-height:1.1}
+    h2{font-size:26px}
+    p.lead{font-size:18px;color:#d6e1ff;max-width:760px}
+    .badge{display:inline-block;padding:6px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:#0f1834;margin-bottom:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+    .card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--line);border-radius:16px;padding:18px;margin:14px 0}
+    .buttons{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+    a.btn{display:inline-block;background:var(--primary);color:#fff;padding:11px 14px;border-radius:10px;text-decoration:none;font-weight:600}
+    a.btn.secondary{background:#1a2a5f;border:1px solid #3d59b5}
+    .pill{display:inline-block;font-size:13px;padding:3px 8px;border-radius:8px;background:#13255a;color:#bed2ff;margin-left:6px}
+    code{background:#0b1533;padding:2px 6px;border-radius:6px}
+    small,.muted{color:var(--muted)}
+    ul,ol{padding-left:20px;margin:10px 0}
+    .price{font-size:34px;font-weight:800}
+    .ok{color:#a9f5da}
+    .faq dt{font-weight:700;margin-top:10px}
+    .faq dd{margin:6px 0 12px 0;color:#dbe5ff}
+    .trust{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+    .trust span{border:1px solid #2b3d75;background:#0c1737;padding:6px 10px;border-radius:999px;color:#b9cbff;font-size:13px}
+    .sticky{position:sticky;bottom:0;background:rgba(7,13,29,.92);backdrop-filter:blur(8px);border-top:1px solid #2f447f;padding:12px 0;margin-top:24px}
+    .sticky .inner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <span class="badge">⚖️ Hukuk Büroları için Tasarlandı</span>
+      <h1>LawCopilot ile dava hazırlığını hızlandırın</h1>
+      <p class="lead">Belge analizi, dava özeti ve güvenli AI asistanını tek uygulamada birleştirir. Kurulumdan sonra ilk analizini 5 dakikada başlat.</p>
+      <div class="buttons">
+        <a class="btn" href="/releases/LawCopilot-Setup-0.5.0.exe">Windows İndir</a>
+        <a class="btn" href="/releases/LawCopilot-0.5.0.dmg">macOS İndir</a>
+        <a class="btn" href="/releases/lawcopilot-0.5.0-linux.tar.gz">Linux İndir</a>
+      </div>
+      <small>Sürüm 0.5.0 • Ücretsiz deneme • Kurumsal lisans opsiyonu</small>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h3>Öne Çıkan Özellikler</h3>
+        <ul>
+          <li><strong>Belge Arama:</strong> Dilekçe ve kararlar içinde doğal dil ile arama</li>
+          <li><strong>Dava Özeti:</strong> Uzun dosyalardan hızlı strateji özeti üretimi</li>
+          <li><strong>Asistan Chat:</strong> Büroya özel bilgi tabanı ile soru-cevap</li>
+          <li><strong>Connector Yönetimi:</strong> E-posta ve kaynak sistemleri kontrollü bağlama</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Fiyatlandırma</h3>
+        <p><span class="price">₺0</span><span class="pill">14 gün deneme</span></p>
+        <ul>
+          <li class="ok">✓ Sınırsız yerel doküman indeksleme</li>
+          <li class="ok">✓ Temel asistan ve arama</li>
+          <li>Pro ve kurumsal paket: ekip, audit, gelişmiş entegrasyon</li>
+        </ul>
+        <a class="btn secondary" href="mailto:sales@lawcopilot.local?subject=LawCopilot%20Kurumsal%20Fiyat">Kurumsal fiyat iste</a>
+      </div>
+    </section>
+
+    <div class="card">
+      <h3>Güven ve Uyum</h3>
+      <p class="muted">Hukuk verileri için güvenlik varsayılanları açık gelir. Kurulum sonrası doğrulama adımlarını takip ederek üretime alabilirsiniz.</p>
+      <div class="trust">
+        <span>Dry-run connector: açık</span>
+        <span>RBAC + session revocation</span>
+        <span>JSONL denetlenebilir audit log</span>
+        <span>SHA256 kurulum doğrulama</span>
+      </div>
+      <pre>sha256sum LawCopilot-Setup-0.5.0.exe
+openclaw gateway status</pre>
+    </div>
+
+    <div class="card faq">
+      <h3>SSS</h3>
+      <dl>
+        <dt>LawCopilot internet olmadan çalışır mı?</dt>
+        <dd>Evet, temel doküman indeksleme ve yerel iş akışları çevrimdışı kullanılabilir.</dd>
+
+        <dt>Kurulum ne kadar sürer?</dt>
+        <dd>Standart ofis bilgisayarında ortalama 5-10 dakika sürer.</dd>
+
+        <dt>Verilerim buluta gider mi?</dt>
+        <dd>Varsayılan yapılandırmada veri yerelde kalır; harici bağlantılar yönetici onayı gerektirir.</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>Release Checklist</h3>
+      <ol>
+        <li>API testleri ve <code>scripts/check.sh</code> başarıyla geçti.</li>
+        <li>Install script hash doğrulama ve TLS kısıtları doğrulandı.</li>
+        <li>Security ve threat model dokümanları güncellendi.</li>
+        <li>UI screenshots artifacts/screens altında güncellendi.</li>
+      </ol>
+    </div>
+
+    <div class="sticky">
+      <div class="inner">
+        <strong>Hazırsanız şimdi kurun ve ilk dosyanızı analiz edin.</strong>
+        <div class="buttons" style="margin:0">
+          <a class="btn" href="/releases/LawCopilot-Setup-0.5.0.exe">Windows ile başla</a>
+          <a class="btn secondary" href="/docs/RELEASE_CHECKLIST.md">Kurulum rehberi</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

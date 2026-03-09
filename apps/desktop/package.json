@@ -1,0 +1,96 @@
+{
+  "name": "lawcopilot-desktop",
+  "private": true,
+  "version": "0.7.0-pilot.1",
+  "description": "Pilot desktop shell for LawCopilot",
+  "author": "LawCopilot Team",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "test:runtime": "node scripts/desktop-smoke.cjs",
+    "test:workspace": "node scripts/workspace-security-smoke.cjs",
+    "test:integrations": "node scripts/integration-config-smoke.cjs",
+    "test:packaged": "node scripts/packaged-runtime-smoke.cjs",
+    "test": "npm run test:runtime && npm run test:workspace && npm run test:integrations && npm run test:packaged",
+    "build:backend": "node scripts/build-backend.cjs",
+    "build:backend:windows": "node scripts/build-backend.cjs windows",
+    "build:backend:macos": "node scripts/build-backend.cjs macos",
+    "package:dir": "npm run build:backend && electron-builder --dir",
+    "package:linux": "npm run build:backend && electron-builder --linux dir",
+    "package:windows": "npm run build:backend:windows && electron-builder --win nsis --x64",
+    "package:macos": "npm run build:backend:macos && electron-builder --mac dmg zip --universal",
+    "package": "npm run package:dir"
+  },
+  "devDependencies": {
+    "electron": "^36.3.2",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.lawcopilot.desktop",
+    "productName": "LawCopilot",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "lib/**/*",
+      "scripts/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../ui/dist",
+        "to": "ui-dist",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../api/dist",
+        "to": "api-bin",
+        "filter": [
+          "lawcopilot-api*"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Office"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "artifactName": "LawCopilot-${version}-${os}-${arch}.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "LawCopilot"
+    }
+  }
+}

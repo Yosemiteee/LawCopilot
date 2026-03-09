@@ -1,0 +1,128 @@
+name: build-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  windows-package:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Paket oluştur (Windows)
+        run: ./scripts/package_windows.sh
+      - name: Artefact doğrula (Windows)
+        run: node ./scripts/verify_packaged_artifacts.cjs windows ./apps/desktop/dist
+      - name: Artefact manifesti yaz (Windows)
+        run: node ./scripts/write_artifact_manifest.cjs windows ./apps/desktop/dist ./artifacts/windows-build-artifacts.json
+      - name: Artifact yükle (Windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawcopilot-windows
+          path: |
+            apps/desktop/dist/*.exe
+            artifacts/windows-build-artifacts.json
+          if-no-files-found: error
+
+  mac-backend-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backend ikilisi üret (macOS x64)
+        run: |
+          cd apps/api
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -q -r requirements.txt
+          cd ../desktop
+          npm install
+          LAWCOPILOT_BACKEND_ARCH=x64 npm run build:backend:macos
+      - name: Artifact yükle (macOS x64 backend)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawcopilot-macos-backend-x64
+          path: apps/api/dist/lawcopilot-api-x64
+          if-no-files-found: error
+
+  mac-backend-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backend ikilisi üret (macOS arm64)
+        run: |
+          cd apps/api
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -q -r requirements.txt
+          cd ../desktop
+          npm install
+          LAWCOPILOT_BACKEND_ARCH=arm64 npm run build:backend:macos
+      - name: Artifact yükle (macOS arm64 backend)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawcopilot-macos-backend-arm64
+          path: apps/api/dist/lawcopilot-api-arm64
+          if-no-files-found: error
+
+  macos-package:
+    runs-on: macos-14
+    needs: [mac-backend-x64, mac-backend-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Backend x64 artifact indir
+        uses: actions/download-artifact@v4
+        with:
+          name: lawcopilot-macos-backend-x64
+          path: .artifacts/macos/x64
+      - name: Backend arm64 artifact indir
+        uses: actions/download-artifact@v4
+        with:
+          name: lawcopilot-macos-backend-arm64
+          path: .artifacts/macos/arm64
+      - name: Paket oluştur (macOS)
+        env:
+          LAWCOPILOT_MAC_BACKEND_X64: ${{ github.workspace }}/.artifacts/macos/x64/lawcopilot-api-x64
+          LAWCOPILOT_MAC_BACKEND_ARM64: ${{ github.workspace }}/.artifacts/macos/arm64/lawcopilot-api-arm64
+        run: ./scripts/package_macos.sh
+      - name: Artefact doğrula (macOS)
+        run: node ./scripts/verify_packaged_artifacts.cjs macos ./apps/desktop/dist
+      - name: Artefact manifesti yaz (macOS)
+        run: node ./scripts/write_artifact_manifest.cjs macos ./apps/desktop/dist ./artifacts/macos-build-artifacts.json
+      - name: Artifact yükle (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lawcopilot-macos
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            artifacts/macos-build-artifacts.json
+          if-no-files-found: error

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Node
+node_modules/
+
+# Build outputs
+apps/api/build/
+apps/api/dist/
+apps/ui/dist/
+apps/desktop/dist/
+*.spec
+
+# Runtime data
+artifacts/
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
+# Accidental malformed directory tree
+{apps/
+apps/api/.venv.broken-*/
