@@ -238,7 +238,7 @@ describe("MatterDetailPage", () => {
 
     await waitFor(() => expect(screen.getAllByText("Dosya özeti").length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getByText("Risk notları")).toBeInTheDocument());
-    expect(screen.getByText("Eksik bordro kayıtları")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Eksik bordro kayıtları")).toBeInTheDocument());
   });
 
   it("renders task recommendations", async () => {
