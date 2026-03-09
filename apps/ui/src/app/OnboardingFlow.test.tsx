@@ -70,19 +70,23 @@ describe("Onboarding flow", () => {
   });
 
   it("çalışma klasörü seçildikten sonra çalışma alanına geçer", async () => {
+    let healthCalls = 0;
     installFetchMock({
-      "GET /health": {
-        ok: true,
-        service: "lawcopilot-api",
-        app_name: "LawCopilot",
-        version: "0.7.0-pilot.1",
-        office_id: "default-office",
-        deployment_mode: "local-only",
-        connector_dry_run: true,
-        workspace_configured: false,
-        workspace_root_name: "",
-        rag_backend: "inmemory",
-        rag_runtime: { backend: "inmemory", mode: "default" },
+      "GET /health": () => {
+        healthCalls += 1;
+        return {
+          ok: true,
+          service: "lawcopilot-api",
+          app_name: "LawCopilot",
+          version: "0.7.0-pilot.1",
+          office_id: "default-office",
+          deployment_mode: "local-only",
+          connector_dry_run: true,
+          workspace_configured: healthCalls > 1,
+          workspace_root_name: healthCalls > 1 ? "Dava Belgeleri" : "",
+          rag_backend: "inmemory",
+          rag_runtime: { backend: "inmemory", mode: "default" },
+        };
       },
       "GET /workspace": {
         configured: true,
@@ -117,14 +121,6 @@ describe("Onboarding flow", () => {
     await waitFor(() => expect(screen.getByText("Çalışma klasörü seç")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Çalışma klasörü seç"));
 
-    await waitFor(() => {
-      expect(
-        screen.queryByText("Çalışma alanına geç") || screen.queryByText("Çalışma alanı araması")
-      ).toBeTruthy();
-    });
-    if (screen.queryByText("Çalışma alanına geç")) {
-      fireEvent.click(screen.getByText("Çalışma alanına geç"));
-    }
-    expect(screen.getByText("Çalışma alanı araması")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Çalışma alanı araması")).toBeInTheDocument());
   });
 });

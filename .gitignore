@@ -23,5 +23,4 @@ artifacts/
 Thumbs.db
 
 # Accidental malformed directory tree
-{apps/
 apps/api/.venv.broken-*/
