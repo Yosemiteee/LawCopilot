@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const { loadDesktopConfig, sanitizeDesktopConfig, saveDesktopConfig } = require("../lib/config.cjs");
+const { parseAuthUrl } = require("../lib/codex-oauth.cjs");
 const { sendTelegramTestMessage, validateProviderConfig, validateTelegramConfig } = require("../lib/integrations.cjs");
 
 async function main() {
@@ -39,8 +40,30 @@ async function main() {
     assert.ok(String(sanitized.provider.apiKeyMasked).includes("***"));
     assert.ok(String(sanitized.telegram.botTokenMasked).includes("***"));
 
+    const oauthSaved = saveDesktopConfig(
+      {
+        provider: {
+          type: "openai-codex",
+          authMode: "oauth",
+          model: "openai-codex/gpt-5.3-codex",
+          availableModels: ["openai-codex/gpt-5.3-codex", "openai-codex/gpt-5.3-codex-spark"],
+          oauthConnected: true,
+          validationStatus: "valid",
+        },
+      },
+      { repoRoot, overrideDir: configDir, storagePath: path.join(tempRoot, "artifacts") },
+    );
+    const oauthSanitized = sanitizeDesktopConfig(oauthSaved);
+    assert.equal(oauthSanitized.provider.type, "openai-codex");
+    assert.equal(Boolean(oauthSanitized.provider.oauthConnected), true);
+    assert.ok(Array.isArray(oauthSanitized.provider.availableModels));
+    assert.equal(
+      parseAuthUrl("Open this URL in your LOCAL browser:\nhttps://auth.openai.com/oauth/authorize?client_id=test&state=abc"),
+      "https://auth.openai.com/oauth/authorize?client_id=test&state=abc",
+    );
+
     const loaded = loadDesktopConfig({ repoRoot, overrideDir: configDir, storagePath: path.join(tempRoot, "artifacts") });
-    assert.equal(loaded.provider.type, "openai-compatible");
+    assert.equal(loaded.provider.type, "openai-codex");
     assert.equal(loaded.telegram.allowedUserId, "6008898834");
 
     const providerCheck = await validateProviderConfig({

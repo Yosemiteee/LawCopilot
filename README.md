@@ -8,6 +8,8 @@ Bugünkü durum:
 - kullanıcı bir çalışma klasörü seçer
 - uygulama yalnız bu klasör ve alt klasörlerine erişir
 - belge tarama, arama, benzer dosya bulma ve dosyaya bağlama yerelde çalışır
+- günlük ajanda, önerilen aksiyonlar ve taslak + onay akışı aynı asistan yüzeyinde toplanır
+- Google Gmail, Google Takvim, Telegram ve Codex/OpenClaw hesap bağlantıları Ayarlar ekranından yönetilir
 - kullanıcıya görünen arayüz Türkçedir
 
 ## Ana özellikler
@@ -17,6 +19,8 @@ Bugünkü durum:
 - Tek tıkla belge görüntüleyici, alıntı atlama ve pasaj vurgulama
 - Dosya adı, içerik, belge türü, checksum ve klasör bağlamı ile açıklanabilir benzer dosya tespiti
 - Kronoloji, risk notu, görev önerisi ve taslak akışları
+- Günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonlar
+- Gmail/Takvim/Telegram sinyallerini dosya ve görev verisiyle birleştiren asistan yüzeyi
 - Dikkat edilmesi gereken noktalar, eksik belge sinyalleri ve taslak önerileri
 - Taslak öncelikli, insan onaylı kullanım modeli
 - Windows ve macOS paketleme hattı
@@ -131,10 +135,12 @@ Not:
 2. Çalışma klasörü seç
 3. Klasörü tara
 4. Belgeleri listele, klasör bazlı arama yap ve benzer dosyaları bul
-5. Dikkat edilmesi gereken noktaları, eksik belge sinyallerini ve taslak önerilerini incele
-6. Gerekli belgeyi bir dosyaya bağla
-7. Arama sonucu, benzer dosya sonucu veya taslak bağlamından ilgili belgeye tek tıkla git
-8. Dosya içinde arama, kronoloji, risk notu, görev ve taslak akışlarını yürüt
+5. Gmail, Takvim, Telegram ve Codex bağlantılarını Ayarlar ekranından doğrula
+6. Asistan ekranında günün ajandasını ve önerilen aksiyonları incele
+7. Dikkat edilmesi gereken noktaları, eksik belge sinyallerini ve taslak önerilerini incele
+8. Gerekli belgeyi bir dosyaya bağla
+9. Arama sonucu, benzer dosya sonucu veya taslak bağlamından ilgili belgeye tek tıkla git
+10. Dosya içinde arama, kronoloji, risk notu, görev ve taslak akışlarını yürüt
 
 ## Çalışma alanı ve dosya ilişkisi
 - Çalışma alanı, seçilen klasör altındaki yerel belge havuzudur.
@@ -152,15 +158,18 @@ Not:
 - Uygulamayı açın.
 - İstediğiniz alt klasörü seçin.
 - Başlangıç model profilini seçin.
-- İsterseniz sağlayıcı ayarını doğrulayın ve Telegram bot bağlantısını kaydedin.
+- İsterseniz Codex sağlayıcısını, Google Gmail/Takvim bağlantısını ve Telegram bot bağlantısını kaydedin.
 - Disk kökü, sistem klasörleri ve kullanıcı klasörünün tamamı güvenlik nedeniyle kabul edilmez.
 - İlk tarama bitince `Çalışma Alanı` ekranı açılır.
+- Günün işi, açık onay isteyen taslaklar ve bekleyen iletişimler `Asistan` ekranında görünür.
 
 ## Pilot sınırı
 - Başlangıç model profili masaüstü yapılandırmasına kaydedilir ve uygulama açılışında varsayılan yönlendirme politikası olarak kullanılır.
-- OpenAI API, OpenAI uyumlu uç nokta ve yerel Ollama için masaüstü onboarding vardır; ayarlar yerel masaüstü yapılandırmasına kaydedilir.
+- OpenAI hesabı için tarayıcı tabanlı Codex oturumu, OpenAI API, OpenAI uyumlu uç nokta ve yerel Ollama için masaüstü onboarding vardır; ayarlar yerel masaüstü yapılandırmasına kaydedilir.
+- Google Gmail ve Google Takvim için masaüstü OAuth onboarding vardır; bağlantı durumları Ayarlar ve Çekirdek ekranında görünür.
 - Telegram bot tokeni ve izinli kullanıcı kimliği için masaüstü onboarding vardır; istenirse test mesajı atılabilir.
-- Tarayıcı onaylı Codex veya ChatGPT hesap girişi bu pilot sürümde gömülü değildir.
+- OpenAI hesabınız Google ile bağlıysa tarayıcıda açılan giriş ekranında Google seçeneğiyle devam edebilirsiniz. Codex oturumu seçilen modeli yerel masaüstü ayarına kaydeder.
+- Ayrı `E-posta Taslakları` ve `Sosyal Medya` ürün yüzeyi kaldırılmıştır; dış aksiyonlar `Asistan` ve `Taslaklar` ekranlarından yürür.
 
 ## İlgili belgeler
 - [ARCHITECTURE.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/ARCHITECTURE.md)

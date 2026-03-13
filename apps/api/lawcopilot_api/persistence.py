@@ -288,6 +288,197 @@ class Persistence:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS connected_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    account_label TEXT,
+                    status TEXT NOT NULL,
+                    scopes_json TEXT,
+                    connected_at TEXT,
+                    last_sync_at TEXT,
+                    manual_review_required INTEGER NOT NULL DEFAULT 1,
+                    metadata_json TEXT,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    UNIQUE (office_id, provider)
+                );
+
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    office_id TEXT PRIMARY KEY,
+                    display_name TEXT,
+                    food_preferences TEXT,
+                    transport_preference TEXT,
+                    weather_preference TEXT,
+                    travel_preferences TEXT,
+                    communication_style TEXT,
+                    assistant_notes TEXT,
+                    important_dates_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS assistant_runtime_profiles (
+                    office_id TEXT PRIMARY KEY,
+                    assistant_name TEXT,
+                    role_summary TEXT,
+                    tone TEXT,
+                    avatar_path TEXT,
+                    soul_notes TEXT,
+                    tools_notes TEXT,
+                    heartbeat_extra_checks_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS email_threads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'gmail',
+                    thread_ref TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    participants_json TEXT NOT NULL,
+                    snippet TEXT,
+                    received_at TEXT,
+                    unread_count INTEGER NOT NULL DEFAULT 0,
+                    reply_needed INTEGER NOT NULL DEFAULT 0,
+                    matter_id INTEGER,
+                    metadata_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL,
+                    UNIQUE (office_id, provider, thread_ref)
+                );
+
+                CREATE TABLE IF NOT EXISTS calendar_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'google-calendar',
+                    external_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    starts_at TEXT NOT NULL,
+                    ends_at TEXT,
+                    attendees_json TEXT,
+                    location TEXT,
+                    matter_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'confirmed',
+                    needs_preparation INTEGER NOT NULL DEFAULT 1,
+                    metadata_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL,
+                    UNIQUE (office_id, provider, external_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS google_drive_files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'google',
+                    external_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    mime_type TEXT,
+                    web_view_link TEXT,
+                    modified_at TEXT,
+                    matter_id INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL,
+                    UNIQUE (office_id, provider, external_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS outbound_drafts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    matter_id INTEGER,
+                    draft_type TEXT NOT NULL,
+                    channel TEXT NOT NULL,
+                    to_contact TEXT,
+                    subject TEXT,
+                    body TEXT NOT NULL,
+                    source_context_json TEXT,
+                    generated_from TEXT,
+                    ai_model TEXT,
+                    ai_provider TEXT,
+                    approval_status TEXT NOT NULL DEFAULT 'pending_review',
+                    delivery_status TEXT NOT NULL DEFAULT 'not_sent',
+                    created_by TEXT NOT NULL,
+                    approved_by TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS assistant_actions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    matter_id INTEGER,
+                    action_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    rationale TEXT,
+                    source_refs_json TEXT,
+                    target_channel TEXT,
+                    draft_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'suggested',
+                    manual_review_required INTEGER NOT NULL DEFAULT 1,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL,
+                    FOREIGN KEY (draft_id) REFERENCES outbound_drafts(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS approval_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    action_id INTEGER,
+                    outbound_draft_id INTEGER,
+                    event_type TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    note TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (action_id) REFERENCES assistant_actions(id) ON DELETE SET NULL,
+                    FOREIGN KEY (outbound_draft_id) REFERENCES outbound_drafts(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS assistant_threads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    UNIQUE (office_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS assistant_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    thread_id INTEGER NOT NULL,
+                    office_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    linked_entities_json TEXT,
+                    tool_suggestions_json TEXT,
+                    draft_preview_json TEXT,
+                    source_context_json TEXT,
+                    requires_approval INTEGER NOT NULL DEFAULT 0,
+                    generated_from TEXT,
+                    ai_provider TEXT,
+                    ai_model TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (thread_id) REFERENCES assistant_threads(id) ON DELETE CASCADE,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS query_jobs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     owner TEXT NOT NULL,
@@ -318,6 +509,17 @@ class Persistence:
                 CREATE INDEX IF NOT EXISTS idx_workspace_document_chunks_doc ON workspace_document_chunks (workspace_document_id, chunk_index);
                 CREATE INDEX IF NOT EXISTS idx_workspace_document_chunks_scope ON workspace_document_chunks (workspace_root_id, workspace_document_id);
                 CREATE INDEX IF NOT EXISTS idx_workspace_matter_links_matter ON workspace_matter_links (matter_id, workspace_document_id);
+                CREATE INDEX IF NOT EXISTS idx_connected_accounts_provider ON connected_accounts (office_id, provider);
+                CREATE INDEX IF NOT EXISTS idx_user_profiles_office ON user_profiles (office_id);
+                CREATE INDEX IF NOT EXISTS idx_assistant_runtime_profiles_office ON assistant_runtime_profiles (office_id);
+                CREATE INDEX IF NOT EXISTS idx_email_threads_office ON email_threads (office_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_calendar_events_office ON calendar_events (office_id, starts_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_google_drive_files_office ON google_drive_files (office_id, modified_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_outbound_drafts_office ON outbound_drafts (office_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_outbound_drafts_matter ON outbound_drafts (matter_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_assistant_actions_office ON assistant_actions (office_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_approval_events_office ON approval_events (office_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_assistant_messages_thread ON assistant_messages (thread_id, id ASC);
                 """
             )
             self._ensure_column(conn, "tasks", "office_id", "TEXT NOT NULL DEFAULT 'default-office'")
@@ -1737,3 +1939,881 @@ class Persistence:
                 (max(1, min(limit, 100)),),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    @staticmethod
+    def _decode_json_field(row: dict[str, Any], source_key: str, target_key: str) -> dict[str, Any]:
+        raw = row.get(source_key)
+        if raw:
+            try:
+                row[target_key] = json.loads(str(raw))
+            except json.JSONDecodeError:
+                row[target_key] = []
+        else:
+            row[target_key] = []
+        row.pop(source_key, None)
+        return row
+
+    def upsert_connected_account(
+        self,
+        office_id: str,
+        provider: str,
+        *,
+        account_label: str,
+        status: str,
+        scopes: list[str] | None = None,
+        connected_at: str | None = None,
+        last_sync_at: str | None = None,
+        manual_review_required: bool = True,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO connected_accounts (
+                    office_id, provider, account_label, status, scopes_json, connected_at,
+                    last_sync_at, manual_review_required, metadata_json, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider) DO UPDATE SET
+                    account_label=excluded.account_label,
+                    status=excluded.status,
+                    scopes_json=excluded.scopes_json,
+                    connected_at=excluded.connected_at,
+                    last_sync_at=excluded.last_sync_at,
+                    manual_review_required=excluded.manual_review_required,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    account_label,
+                    status,
+                    json.dumps(scopes or [], ensure_ascii=False),
+                    connected_at,
+                    last_sync_at,
+                    1 if manual_review_required else 0,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM connected_accounts WHERE office_id=? AND provider=?",
+                (office_id, provider),
+            ).fetchone()
+            return self._decode_connected_account(dict(row)) if row else {}
+
+    def get_connected_account(self, office_id: str, provider: str) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM connected_accounts WHERE office_id=? AND provider=?",
+                (office_id, provider),
+            ).fetchone()
+            return self._decode_connected_account(dict(row)) if row else None
+
+    def list_connected_accounts(self, office_id: str) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM connected_accounts WHERE office_id=? ORDER BY provider ASC",
+                (office_id,),
+            ).fetchall()
+            return [self._decode_connected_account(dict(row)) for row in rows]
+
+    @staticmethod
+    def _decode_connected_account(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "scopes_json", "scopes")
+        row = Persistence._decode_json_field(row, "metadata_json", "metadata")
+        row["manual_review_required"] = bool(row.get("manual_review_required"))
+        return row
+
+    def upsert_user_profile(
+        self,
+        office_id: str,
+        *,
+        display_name: str | None = None,
+        food_preferences: str | None = None,
+        transport_preference: str | None = None,
+        weather_preference: str | None = None,
+        travel_preferences: str | None = None,
+        communication_style: str | None = None,
+        assistant_notes: str | None = None,
+        important_dates: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO user_profiles (
+                    office_id, display_name, food_preferences, transport_preference, weather_preference,
+                    travel_preferences, communication_style, assistant_notes, important_dates_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id) DO UPDATE SET
+                    display_name=excluded.display_name,
+                    food_preferences=excluded.food_preferences,
+                    transport_preference=excluded.transport_preference,
+                    weather_preference=excluded.weather_preference,
+                    travel_preferences=excluded.travel_preferences,
+                    communication_style=excluded.communication_style,
+                    assistant_notes=excluded.assistant_notes,
+                    important_dates_json=excluded.important_dates_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    display_name,
+                    food_preferences,
+                    transport_preference,
+                    weather_preference,
+                    travel_preferences,
+                    communication_style,
+                    assistant_notes,
+                    json.dumps(important_dates or [], ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM user_profiles WHERE office_id=?", (office_id,)).fetchone()
+            return self._decode_user_profile(dict(row)) if row else self._empty_user_profile(office_id)
+
+    def get_user_profile(self, office_id: str) -> dict[str, Any]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM user_profiles WHERE office_id=?", (office_id,)).fetchone()
+            return self._decode_user_profile(dict(row)) if row else self._empty_user_profile(office_id)
+
+    def upsert_assistant_runtime_profile(
+        self,
+        office_id: str,
+        *,
+        assistant_name: str | None = None,
+        role_summary: str | None = None,
+        tone: str | None = None,
+        avatar_path: str | None = None,
+        soul_notes: str | None = None,
+        tools_notes: str | None = None,
+        heartbeat_extra_checks: list[str] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO assistant_runtime_profiles (
+                    office_id, assistant_name, role_summary, tone, avatar_path, soul_notes,
+                    tools_notes, heartbeat_extra_checks_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id) DO UPDATE SET
+                    assistant_name=excluded.assistant_name,
+                    role_summary=excluded.role_summary,
+                    tone=excluded.tone,
+                    avatar_path=excluded.avatar_path,
+                    soul_notes=excluded.soul_notes,
+                    tools_notes=excluded.tools_notes,
+                    heartbeat_extra_checks_json=excluded.heartbeat_extra_checks_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    assistant_name,
+                    role_summary,
+                    tone,
+                    avatar_path,
+                    soul_notes,
+                    tools_notes,
+                    json.dumps(heartbeat_extra_checks or [], ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM assistant_runtime_profiles WHERE office_id=?", (office_id,)).fetchone()
+            return self._decode_assistant_runtime_profile(dict(row)) if row else self._empty_assistant_runtime_profile(office_id)
+
+    def get_assistant_runtime_profile(self, office_id: str) -> dict[str, Any]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM assistant_runtime_profiles WHERE office_id=?", (office_id,)).fetchone()
+            return self._decode_assistant_runtime_profile(dict(row)) if row else self._empty_assistant_runtime_profile(office_id)
+
+    @staticmethod
+    def _empty_user_profile(office_id: str) -> dict[str, Any]:
+        return {
+            "office_id": office_id,
+            "display_name": "",
+            "food_preferences": "",
+            "transport_preference": "",
+            "weather_preference": "",
+            "travel_preferences": "",
+            "communication_style": "",
+            "assistant_notes": "",
+            "important_dates": [],
+            "created_at": None,
+            "updated_at": None,
+        }
+
+    @staticmethod
+    def _decode_user_profile(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "important_dates_json", "important_dates")
+        row["display_name"] = row.get("display_name") or ""
+        row["food_preferences"] = row.get("food_preferences") or ""
+        row["transport_preference"] = row.get("transport_preference") or ""
+        row["weather_preference"] = row.get("weather_preference") or ""
+        row["travel_preferences"] = row.get("travel_preferences") or ""
+        row["communication_style"] = row.get("communication_style") or ""
+        row["assistant_notes"] = row.get("assistant_notes") or ""
+        return row
+
+    @staticmethod
+    def _empty_assistant_runtime_profile(office_id: str) -> dict[str, Any]:
+        return {
+            "office_id": office_id,
+            "assistant_name": "",
+            "role_summary": "Kaynak dayanaklı hukuk çalışma asistanı",
+            "tone": "Net ve profesyonel",
+            "avatar_path": "",
+            "soul_notes": "",
+            "tools_notes": "",
+            "heartbeat_extra_checks": [],
+            "created_at": None,
+            "updated_at": None,
+        }
+
+    @staticmethod
+    def _decode_assistant_runtime_profile(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "heartbeat_extra_checks_json", "heartbeat_extra_checks")
+        row["assistant_name"] = row.get("assistant_name") or ""
+        row["role_summary"] = row.get("role_summary") or "Kaynak dayanaklı hukuk çalışma asistanı"
+        row["tone"] = row.get("tone") or "Net ve profesyonel"
+        row["avatar_path"] = row.get("avatar_path") or ""
+        row["soul_notes"] = row.get("soul_notes") or ""
+        row["tools_notes"] = row.get("tools_notes") or ""
+        return row
+
+    def upsert_email_thread(
+        self,
+        office_id: str,
+        *,
+        provider: str,
+        thread_ref: str,
+        subject: str,
+        participants: list[str] | None = None,
+        snippet: str | None = None,
+        received_at: str | None = None,
+        unread_count: int = 0,
+        reply_needed: bool = False,
+        matter_id: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO email_threads (
+                    office_id, provider, thread_ref, subject, participants_json, snippet,
+                    received_at, unread_count, reply_needed, matter_id, metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider, thread_ref) DO UPDATE SET
+                    subject=excluded.subject,
+                    participants_json=excluded.participants_json,
+                    snippet=excluded.snippet,
+                    received_at=excluded.received_at,
+                    unread_count=excluded.unread_count,
+                    reply_needed=excluded.reply_needed,
+                    matter_id=excluded.matter_id,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    thread_ref,
+                    subject,
+                    json.dumps(participants or [], ensure_ascii=False),
+                    snippet,
+                    received_at,
+                    unread_count,
+                    1 if reply_needed else 0,
+                    matter_id,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM email_threads WHERE office_id=? AND provider=? AND thread_ref=?",
+                (office_id, provider, thread_ref),
+            ).fetchone()
+            return self._decode_email_thread(dict(row)) if row else {}
+
+    def list_email_threads(self, office_id: str, *, reply_needed_only: bool = False) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            query = "SELECT * FROM email_threads WHERE office_id=?"
+            params: list[Any] = [office_id]
+            if reply_needed_only:
+                query += " AND reply_needed=1"
+            query += " ORDER BY COALESCE(received_at, updated_at) DESC, id DESC"
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_email_thread(dict(row)) for row in rows]
+
+    @staticmethod
+    def _decode_email_thread(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "participants_json", "participants")
+        row = Persistence._decode_json_field(row, "metadata_json", "metadata")
+        row["reply_needed"] = bool(row.get("reply_needed"))
+        return row
+
+    def upsert_calendar_event(
+        self,
+        office_id: str,
+        *,
+        provider: str,
+        external_id: str,
+        title: str,
+        starts_at: str,
+        ends_at: str | None = None,
+        attendees: list[str] | None = None,
+        location: str | None = None,
+        matter_id: int | None = None,
+        status: str = "confirmed",
+        needs_preparation: bool = True,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO calendar_events (
+                    office_id, provider, external_id, title, starts_at, ends_at, attendees_json, location,
+                    matter_id, status, needs_preparation, metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider, external_id) DO UPDATE SET
+                    title=excluded.title,
+                    starts_at=excluded.starts_at,
+                    ends_at=excluded.ends_at,
+                    attendees_json=excluded.attendees_json,
+                    location=excluded.location,
+                    matter_id=excluded.matter_id,
+                    status=excluded.status,
+                    needs_preparation=excluded.needs_preparation,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    external_id,
+                    title,
+                    starts_at,
+                    ends_at,
+                    json.dumps(attendees or [], ensure_ascii=False),
+                    location,
+                    matter_id,
+                    status,
+                    1 if needs_preparation else 0,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM calendar_events WHERE office_id=? AND provider=? AND external_id=?",
+                (office_id, provider, external_id),
+            ).fetchone()
+            return self._decode_calendar_event(dict(row)) if row else {}
+
+    def list_calendar_events(self, office_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM calendar_events WHERE office_id=? ORDER BY starts_at ASC, id DESC LIMIT ?",
+                (office_id, max(1, min(limit, 200))),
+            ).fetchall()
+            return [self._decode_calendar_event(dict(row)) for row in rows]
+
+    @staticmethod
+    def _decode_calendar_event(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "attendees_json", "attendees")
+        row = Persistence._decode_json_field(row, "metadata_json", "metadata")
+        row["needs_preparation"] = bool(row.get("needs_preparation"))
+        return row
+
+    def upsert_drive_file(
+        self,
+        office_id: str,
+        *,
+        provider: str,
+        external_id: str,
+        name: str,
+        mime_type: str | None = None,
+        web_view_link: str | None = None,
+        modified_at: str | None = None,
+        matter_id: int | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO google_drive_files (
+                    office_id, provider, external_id, name, mime_type, web_view_link,
+                    modified_at, matter_id, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider, external_id) DO UPDATE SET
+                    name=excluded.name,
+                    mime_type=excluded.mime_type,
+                    web_view_link=excluded.web_view_link,
+                    modified_at=excluded.modified_at,
+                    matter_id=excluded.matter_id,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    external_id,
+                    name,
+                    mime_type,
+                    web_view_link,
+                    modified_at,
+                    matter_id,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM google_drive_files WHERE office_id=? AND provider=? AND external_id=?",
+                (office_id, provider, external_id),
+            ).fetchone()
+            return dict(row) if row else {}
+
+    def list_drive_files(self, office_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM google_drive_files WHERE office_id=? ORDER BY modified_at DESC, id DESC LIMIT ?",
+                (office_id, max(1, min(limit, 200))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def create_outbound_draft(
+        self,
+        office_id: str,
+        *,
+        draft_type: str,
+        channel: str,
+        body: str,
+        created_by: str,
+        matter_id: int | None = None,
+        to_contact: str | None = None,
+        subject: str | None = None,
+        source_context: dict[str, Any] | None = None,
+        generated_from: str | None = None,
+        ai_model: str | None = None,
+        ai_provider: str | None = None,
+        approval_status: str = "pending_review",
+        delivery_status: str = "not_sent",
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            if matter_id is not None and not self._get_matter_row(conn, matter_id, office_id):
+                raise ValueError("Dosya bulunamadı.")
+            cur = conn.execute(
+                """
+                INSERT INTO outbound_drafts (
+                    office_id, matter_id, draft_type, channel, to_contact, subject, body, source_context_json,
+                    generated_from, ai_model, ai_provider, approval_status, delivery_status, created_by,
+                    approved_by, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                """,
+                (
+                    office_id,
+                    matter_id,
+                    draft_type,
+                    channel,
+                    to_contact,
+                    subject,
+                    body,
+                    json.dumps(source_context or {}, ensure_ascii=False),
+                    generated_from,
+                    ai_model,
+                    ai_provider,
+                    approval_status,
+                    delivery_status,
+                    created_by,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM outbound_drafts WHERE id=?", (cur.lastrowid,)).fetchone()
+            return self._decode_outbound_draft(dict(row)) if row else {}
+
+    def list_outbound_drafts(self, office_id: str, *, matter_id: int | None = None) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            query = "SELECT * FROM outbound_drafts WHERE office_id=?"
+            params: list[Any] = [office_id]
+            if matter_id is not None:
+                query += " AND matter_id=?"
+                params.append(matter_id)
+            query += " ORDER BY updated_at DESC, id DESC"
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_outbound_draft(dict(row)) for row in rows]
+
+    def get_outbound_draft(self, office_id: str, draft_id: int) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM outbound_drafts WHERE office_id=? AND id=?",
+                (office_id, draft_id),
+            ).fetchone()
+            return self._decode_outbound_draft(dict(row)) if row else None
+
+    def update_outbound_draft(
+        self,
+        office_id: str,
+        draft_id: int,
+        *,
+        approval_status: str | None = None,
+        delivery_status: str | None = None,
+        approved_by: str | None = None,
+    ) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM outbound_drafts WHERE office_id=? AND id=?",
+                (office_id, draft_id),
+            ).fetchone()
+            if not row:
+                return None
+            current = dict(row)
+            conn.execute(
+                """
+                UPDATE outbound_drafts
+                SET approval_status=?, delivery_status=?, approved_by=?, updated_at=?
+                WHERE office_id=? AND id=?
+                """,
+                (
+                    approval_status or current["approval_status"],
+                    delivery_status or current["delivery_status"],
+                    approved_by if approved_by is not None else current.get("approved_by"),
+                    self._now(),
+                    office_id,
+                    draft_id,
+                ),
+            )
+            updated = conn.execute(
+                "SELECT * FROM outbound_drafts WHERE office_id=? AND id=?",
+                (office_id, draft_id),
+            ).fetchone()
+            return self._decode_outbound_draft(dict(updated)) if updated else None
+
+    @staticmethod
+    def _decode_outbound_draft(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "source_context_json", "source_context")
+        return row
+
+    def create_assistant_action(
+        self,
+        office_id: str,
+        *,
+        action_type: str,
+        title: str,
+        created_by: str,
+        matter_id: int | None = None,
+        description: str | None = None,
+        rationale: str | None = None,
+        source_refs: list[dict[str, Any]] | None = None,
+        target_channel: str | None = None,
+        draft_id: int | None = None,
+        status: str = "suggested",
+        manual_review_required: bool = True,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO assistant_actions (
+                    office_id, matter_id, action_type, title, description, rationale, source_refs_json,
+                    target_channel, draft_id, status, manual_review_required, created_by, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    office_id,
+                    matter_id,
+                    action_type,
+                    title,
+                    description,
+                    rationale,
+                    json.dumps(source_refs or [], ensure_ascii=False),
+                    target_channel,
+                    draft_id,
+                    status,
+                    1 if manual_review_required else 0,
+                    created_by,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM assistant_actions WHERE id=?", (cur.lastrowid,)).fetchone()
+            return self._decode_assistant_action(dict(row)) if row else {}
+
+    def list_assistant_actions(
+        self,
+        office_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            query = """
+                SELECT a.*, d.subject AS draft_subject, d.to_contact AS draft_to_contact
+                FROM assistant_actions a
+                LEFT JOIN outbound_drafts d ON d.id = a.draft_id
+                WHERE a.office_id=?
+            """
+            params: list[Any] = [office_id]
+            if status:
+                query += " AND a.status=?"
+                params.append(status)
+            query += " ORDER BY a.updated_at DESC, a.id DESC LIMIT ?"
+            params.append(max(1, min(limit, 200)))
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_assistant_action(dict(row)) for row in rows]
+
+    def get_assistant_action(self, office_id: str, action_id: int) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM assistant_actions WHERE office_id=? AND id=?",
+                (office_id, action_id),
+            ).fetchone()
+            return self._decode_assistant_action(dict(row)) if row else None
+
+    def update_assistant_action_status(self, office_id: str, action_id: int, status: str, *, draft_id: int | None = None) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            current = conn.execute(
+                "SELECT * FROM assistant_actions WHERE office_id=? AND id=?",
+                (office_id, action_id),
+            ).fetchone()
+            if not current:
+                return None
+            conn.execute(
+                "UPDATE assistant_actions SET status=?, draft_id=?, updated_at=? WHERE office_id=? AND id=?",
+                (status, draft_id if draft_id is not None else current["draft_id"], self._now(), office_id, action_id),
+            )
+            row = conn.execute(
+                "SELECT * FROM assistant_actions WHERE office_id=? AND id=?",
+                (office_id, action_id),
+            ).fetchone()
+            return self._decode_assistant_action(dict(row)) if row else None
+
+    @staticmethod
+    def _decode_assistant_action(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "source_refs_json", "source_refs")
+        row["manual_review_required"] = bool(row.get("manual_review_required"))
+        return row
+
+    def add_approval_event(
+        self,
+        office_id: str,
+        *,
+        actor: str,
+        event_type: str,
+        action_id: int | None = None,
+        outbound_draft_id: int | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO approval_events (office_id, action_id, outbound_draft_id, event_type, actor, note, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (office_id, action_id, outbound_draft_id, event_type, actor, note, self._now()),
+            )
+            row = conn.execute("SELECT * FROM approval_events WHERE id=?", (cur.lastrowid,)).fetchone()
+            return dict(row) if row else {}
+
+    def list_approval_events(self, office_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM approval_events WHERE office_id=? ORDER BY created_at DESC, id DESC LIMIT ?",
+                (office_id, max(1, min(limit, 200))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def list_all_matter_drafts(self, office_id: str) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT d.*, m.title AS matter_title
+                FROM drafts d
+                JOIN matters m ON m.id = d.matter_id
+                WHERE d.office_id=?
+                ORDER BY d.updated_at DESC, d.id DESC
+                """,
+                (office_id,),
+            ).fetchall()
+            return [self._decode_draft(dict(row)) for row in rows]
+
+    def list_office_tasks(self, office_id: str) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM tasks WHERE office_id=? ORDER BY COALESCE(due_at, updated_at, created_at) ASC, id DESC",
+                (office_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_or_create_assistant_thread(self, office_id: str, *, created_by: str, title: str = "LawCopilot Asistan") -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            row = conn.execute(
+                "SELECT * FROM assistant_threads WHERE office_id=?",
+                (office_id,),
+            ).fetchone()
+            if row:
+                return dict(row)
+            cur = conn.execute(
+                """
+                INSERT INTO assistant_threads (office_id, title, created_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (office_id, title, created_by, now, now),
+            )
+            row = conn.execute("SELECT * FROM assistant_threads WHERE id=?", (cur.lastrowid,)).fetchone()
+            return dict(row) if row else {}
+
+    def get_assistant_thread(self, office_id: str) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM assistant_threads WHERE office_id=?",
+                (office_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def append_assistant_message(
+        self,
+        office_id: str,
+        *,
+        thread_id: int,
+        role: str,
+        content: str,
+        linked_entities: list[dict[str, Any]] | None = None,
+        tool_suggestions: list[dict[str, Any]] | None = None,
+        draft_preview: dict[str, Any] | None = None,
+        source_context: dict[str, Any] | None = None,
+        requires_approval: bool = False,
+        generated_from: str | None = None,
+        ai_provider: str | None = None,
+        ai_model: str | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO assistant_messages (
+                    thread_id, office_id, role, content, linked_entities_json, tool_suggestions_json,
+                    draft_preview_json, source_context_json, requires_approval, generated_from,
+                    ai_provider, ai_model, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    thread_id,
+                    office_id,
+                    role,
+                    content,
+                    json.dumps(linked_entities or [], ensure_ascii=False),
+                    json.dumps(tool_suggestions or [], ensure_ascii=False),
+                    json.dumps(draft_preview or {}, ensure_ascii=False),
+                    json.dumps(source_context or {}, ensure_ascii=False),
+                    1 if requires_approval else 0,
+                    generated_from,
+                    ai_provider,
+                    ai_model,
+                    now,
+                ),
+            )
+            conn.execute(
+                "UPDATE assistant_threads SET updated_at=? WHERE office_id=? AND id=?",
+                (now, office_id, thread_id),
+            )
+            row = conn.execute("SELECT * FROM assistant_messages WHERE id=?", (cur.lastrowid,)).fetchone()
+            return self._decode_assistant_message(dict(row)) if row else {}
+
+    def list_assistant_messages(
+        self,
+        office_id: str,
+        *,
+        thread_id: int,
+        limit: int = 120,
+        before_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            safe_limit = max(1, min(limit, 500))
+            if before_id is not None:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM assistant_messages
+                    WHERE office_id=? AND thread_id=? AND id < ?
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (office_id, thread_id, before_id, safe_limit),
+                ).fetchall()
+                rows = list(reversed(rows))
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM (
+                        SELECT * FROM assistant_messages
+                        WHERE office_id=? AND thread_id=?
+                        ORDER BY id DESC
+                        LIMIT ?
+                    ) sub ORDER BY id ASC
+                    """,
+                    (office_id, thread_id, safe_limit),
+                ).fetchall()
+            return [self._decode_assistant_message(dict(row)) for row in rows]
+
+    def count_assistant_messages(self, office_id: str, *, thread_id: int) -> int:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM assistant_messages WHERE office_id=? AND thread_id=?",
+                (office_id, thread_id),
+            ).fetchone()
+            return int(row["cnt"]) if row else 0
+
+    def reset_assistant_thread(self, office_id: str, *, created_by: str, title: str = "LawCopilot Asistan") -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM assistant_threads WHERE office_id=?",
+                (office_id,),
+            ).fetchone()
+            if not row:
+                return self.get_or_create_assistant_thread(office_id, created_by=created_by, title=title)
+            thread_id = int(row["id"])
+            conn.execute("DELETE FROM assistant_messages WHERE office_id=? AND thread_id=?", (office_id, thread_id))
+            conn.execute(
+                "UPDATE assistant_threads SET title=?, created_by=?, updated_at=? WHERE office_id=? AND id=?",
+                (title, created_by, now, office_id, thread_id),
+            )
+            updated = conn.execute(
+                "SELECT * FROM assistant_threads WHERE office_id=? AND id=?",
+                (office_id, thread_id),
+            ).fetchone()
+            return dict(updated) if updated else {}
+
+    @staticmethod
+    def _decode_assistant_message(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "linked_entities_json", "linked_entities")
+        row = Persistence._decode_json_field(row, "tool_suggestions_json", "tool_suggestions")
+        row = Persistence._decode_json_field(row, "draft_preview_json", "draft_preview")
+        row = Persistence._decode_json_field(row, "source_context_json", "source_context")
+        row["requires_approval"] = bool(row.get("requires_approval"))
+        return row

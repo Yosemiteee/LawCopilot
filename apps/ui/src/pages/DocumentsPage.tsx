@@ -226,7 +226,12 @@ export function DocumentsPage() {
         <SectionCard title="Benzer dava dosyaları" subtitle="Sonuçlar kör skor değil, açıklama ve destekleyici pasajlarla gelir.">
           {similar?.items.length ? (
             <div className="stack">
-              <p style={{ marginBottom: 0 }}>{similar.explanation}</p>
+              <div className="callout callout--accent">
+                <strong>Benzerlik özeti</strong>
+                <p style={{ marginBottom: 0 }}>{similar.explanation}</p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+                </div>
+              </div>
               <div className="list">
                 {similar.items.map((item) => (
                   <article className="list-item" key={item.workspace_document_id}>

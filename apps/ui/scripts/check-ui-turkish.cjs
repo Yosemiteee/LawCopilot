@@ -124,10 +124,13 @@ function shouldIgnore(literal) {
   if (literal.startsWith(".") || literal.startsWith("/") || literal.startsWith("http") || literal.startsWith("#")) {
     return true;
   }
+  if (literal.startsWith("?tool=") || literal.includes("&tool=")) {
+    return true;
+  }
   if (!/[A-Za-z]/.test(literal)) {
     return true;
   }
-  if (/^[a-z0-9_:/.-]+$/i.test(literal) && !/[A-ZÇĞİÖŞÜ]/.test(literal)) {
+  if (/^[a-z0-9_:+/.-]+$/i.test(literal) && !/[A-ZÇĞİÖŞÜ]/.test(literal)) {
     return true;
   }
   if (/^(GET|POST|PUT|DELETE|PATCH)\b/.test(literal)) {

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="LawCopilot">
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5efe3" />
+      <stop offset="100%" stop-color="#d8c3a4" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="42" fill="url(#bg)" />
+  <rect x="40" y="52" width="176" height="152" rx="18" fill="#18202a" />
+  <rect x="56" y="68" width="144" height="120" rx="12" fill="#f7f2ea" />
+  <path d="M128 86c-14.4 0-26 11.6-26 26 0 4.2 1 8.2 2.9 11.7l-22.4 26.8h24.7l9.3-11.8 11.4 13.5 11.4-13.5 9.3 11.8h24.7l-22.4-26.8c1.9-3.5 2.9-7.5 2.9-11.7 0-14.4-11.6-26-26-26Zm0 14c6.6 0 12 5.4 12 12s-5.4 12-12 12-12-5.4-12-12 5.4-12 12-12Z" fill="#946b2d" />
+  <rect x="78" y="176" width="100" height="8" rx="4" fill="#946b2d" />
+</svg>

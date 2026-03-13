@@ -164,3 +164,114 @@ class SimilarDocumentsRequest(BaseModel):
 
 class WorkspaceAttachRequest(BaseModel):
     workspace_document_id: int = Field(gt=0)
+
+
+class AssistantActionGenerateRequest(BaseModel):
+    action_type: str = Field(
+        pattern="^(send_email|reply_email|send_telegram_message|create_task|prepare_client_update|prepare_internal_summary)$"
+    )
+    matter_id: int | None = Field(default=None, gt=0)
+    title: str | None = Field(default=None, max_length=240)
+    instructions: str | None = Field(default=None, max_length=1600)
+    target_channel: str | None = Field(default=None, pattern="^(email|telegram|internal|task)$")
+    to_contact: str | None = Field(default=None, max_length=255)
+    source_refs: list[dict] | None = Field(default=None, max_length=20)
+
+
+class AssistantActionDecisionRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=1200)
+
+
+class AssistantDraftSendRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=1200)
+
+
+class AssistantThreadMessageRequest(BaseModel):
+    content: str = Field(min_length=1, max_length=8000)
+    matter_id: int | None = Field(default=None, gt=0)
+    source_refs: list[dict] | None = Field(default=None, max_length=20)
+
+
+class AssistantCalendarEventCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    starts_at: datetime
+    ends_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=255)
+    matter_id: int | None = Field(default=None, gt=0)
+    needs_preparation: bool = True
+    provider: str = Field(default="lawcopilot-planner", pattern=r"^[a-z0-9_-]{2,64}$")
+    external_id: str | None = Field(default=None, max_length=255)
+    status: str = Field(default="confirmed", pattern="^(confirmed|tentative|cancelled|open)$")
+    attendees: list[str] = Field(default_factory=list, max_length=40)
+    notes: str | None = Field(default=None, max_length=2000)
+    metadata: dict | None = None
+
+
+class GoogleEmailThreadMirrorRequest(BaseModel):
+    provider: str = Field(default="google")
+    thread_ref: str = Field(min_length=1, max_length=255)
+    subject: str = Field(min_length=1, max_length=500)
+    snippet: str | None = Field(default=None, max_length=4000)
+    sender: str | None = Field(default=None, max_length=255)
+    received_at: datetime | None = None
+    unread_count: int = Field(default=0, ge=0, le=9999)
+    reply_needed: bool = True
+    matter_id: int | None = Field(default=None, gt=0)
+    metadata: dict | None = None
+
+
+class GoogleCalendarEventMirrorRequest(BaseModel):
+    provider: str = Field(default="google")
+    external_id: str = Field(min_length=1, max_length=255)
+    title: str = Field(min_length=1, max_length=500)
+    starts_at: datetime
+    ends_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=255)
+    matter_id: int | None = Field(default=None, gt=0)
+    metadata: dict | None = None
+
+
+class GoogleDriveFileMirrorRequest(BaseModel):
+    provider: str = Field(default="google")
+    external_id: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=500)
+    mime_type: str | None = Field(default=None, max_length=120)
+    web_view_link: str | None = Field(default=None, max_length=1000)
+    modified_at: datetime | None = None
+
+
+class GoogleSyncRequest(BaseModel):
+    account_label: str | None = Field(default=None, max_length=255)
+    scopes: list[str] | None = Field(default=None, max_length=20)
+    email_threads: list[GoogleEmailThreadMirrorRequest] = Field(default_factory=list, max_length=50)
+    calendar_events: list[GoogleCalendarEventMirrorRequest] = Field(default_factory=list, max_length=50)
+    drive_files: list[GoogleDriveFileMirrorRequest] = Field(default_factory=list, max_length=50)
+    synced_at: datetime | None = None
+
+
+class ProfileImportantDateRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=160)
+    date: str = Field(min_length=10, max_length=10, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    recurring_annually: bool = True
+    notes: str | None = Field(default=None, max_length=600)
+
+
+class UserProfileRequest(BaseModel):
+    display_name: str | None = Field(default=None, max_length=160)
+    food_preferences: str | None = Field(default=None, max_length=1200)
+    transport_preference: str | None = Field(default=None, max_length=240)
+    weather_preference: str | None = Field(default=None, max_length=240)
+    travel_preferences: str | None = Field(default=None, max_length=1200)
+    communication_style: str | None = Field(default=None, max_length=600)
+    assistant_notes: str | None = Field(default=None, max_length=2400)
+    important_dates: list[ProfileImportantDateRequest] = Field(default_factory=list, max_length=24)
+
+
+class AssistantRuntimeProfileRequest(BaseModel):
+    assistant_name: str | None = Field(default=None, max_length=120)
+    role_summary: str | None = Field(default=None, max_length=240)
+    tone: str | None = Field(default=None, max_length=120)
+    avatar_path: str | None = Field(default=None, max_length=800)
+    soul_notes: str | None = Field(default=None, max_length=2400)
+    tools_notes: str | None = Field(default=None, max_length=2400)
+    heartbeat_extra_checks: list[str] = Field(default_factory=list, max_length=12)

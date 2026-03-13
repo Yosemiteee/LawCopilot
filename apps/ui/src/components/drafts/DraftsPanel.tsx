@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAppContext } from "../../app/AppContext";
 import { resolveSourceDocumentReferences } from "../../lib/documentViewer";
-import { kanalEtiketi, sistemKaynagiEtiketi, taslakTipiEtiketi } from "../../lib/labels";
+import { kanalEtiketi, sistemKaynagiEtiketi, taslakTipiEtiketi, uretimDurumuEtiketi } from "../../lib/labels";
 import { createMatterDraft, generateMatterDraft, listMatterDocuments, listMatterDrafts, listMatterWorkspaceDocuments } from "../../services/lawcopilotApi";
 import type { Draft, MatterDocument, MatterWorkspaceDocumentLink } from "../../types/domain";
 import { DocumentReferenceLinks } from "../documents/DocumentReferenceLinks";
@@ -200,6 +200,7 @@ export function DraftsPanel({ matterId, matterLabel }: { matterId: number; matte
                     <StatusBadge>{kanalEtiketi(draft.target_channel)}</StatusBadge>
                     <StatusBadge tone="accent">{draft.status}</StatusBadge>
                     {draft.generated_from ? <StatusBadge>{sistemKaynagiEtiketi(draft.generated_from)}</StatusBadge> : null}
+                    {draft.generated_from ? <StatusBadge>{uretimDurumuEtiketi(draft.generated_from)}</StatusBadge> : null}
                     {draft.manual_review_required ? <StatusBadge tone="warning">İnceleme gerekli</StatusBadge> : null}
                   </div>
                 </div>

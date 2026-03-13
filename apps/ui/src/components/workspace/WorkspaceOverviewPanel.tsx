@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAppContext } from "../../app/AppContext";
-import { belgeDurumuEtiketi, dagitimKipiEtiketi, destekSeviyesiEtiketi } from "../../lib/labels";
+import { belgeDurumuEtiketi, dagitimKipiEtiketi, destekSeviyesiEtiketi, modelProfilEtiketi } from "../../lib/labels";
 import { buildCitationTarget, buildDocumentViewerPath } from "../../lib/documentViewer";
-import { getWorkspaceOverview, runWorkspaceScan, searchWorkspace } from "../../services/lawcopilotApi";
+import { getWorkspaceOverview, runWorkspaceScan, saveWorkspaceRoot, searchWorkspace } from "../../services/lawcopilotApi";
 import type { WorkspaceOverviewResponse, WorkspaceSearchResponse } from "../../types/domain";
 import { EmptyState } from "../common/EmptyState";
 import { MetricCard } from "../common/MetricCard";
@@ -12,9 +12,10 @@ import { SectionCard } from "../common/SectionCard";
 import { StatusBadge } from "../common/StatusBadge";
 import { CitationList } from "../citations/CitationList";
 import { sozluk } from "../../i18n";
+import { normalizeUiErrorMessage } from "../../lib/errors";
 
 export function WorkspaceOverviewPanel() {
-  const { settings, setWorkspace } = useAppContext();
+  const { settings, setWorkspace, setCurrentMatter } = useAppContext();
   const navigate = useNavigate();
   const [overview, setOverview] = useState<WorkspaceOverviewResponse | null>(null);
   const [result, setResult] = useState<WorkspaceSearchResponse | null>(null);
@@ -22,6 +23,9 @@ export function WorkspaceOverviewPanel() {
   const [error, setError] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [manualPath, setManualPath] = useState(settings.workspaceRootPath || "");
+  const [isSavingPath, setIsSavingPath] = useState(false);
+  const isDesktopApp = Boolean(window.lawcopilotDesktop?.chooseWorkspaceRoot);
 
   async function refreshOverview() {
     try {
@@ -35,7 +39,7 @@ export function WorkspaceOverviewPanel() {
       });
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : sozluk.workspace.loadError);
+      setError(normalizeUiErrorMessage(err, sozluk.workspace.loadError));
     }
   }
 
@@ -60,10 +64,36 @@ export function WorkspaceOverviewPanel() {
         workspaceRootPath: String(workspace.workspaceRootPath || ""),
         workspaceRootHash: String(workspace.workspaceRootHash || "")
       });
+      setCurrentMatter(null, "");
       await refreshOverview();
       navigate("/workspace", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : sozluk.workspace.chooseError);
+      setError(normalizeUiErrorMessage(err, sozluk.workspace.chooseError));
+    }
+  }
+
+  async function setRootManually() {
+    if (!manualPath.trim()) return;
+    setIsSavingPath(true);
+    try {
+      const pathName = manualPath.trim().split("/").filter(Boolean).pop() || manualPath.trim();
+      const result = await saveWorkspaceRoot(settings, {
+        root_path: manualPath.trim(),
+        display_name: pathName,
+      });
+      setWorkspace({
+        workspaceConfigured: true,
+        workspaceRootName: result.workspace.display_name || pathName,
+        workspaceRootPath: result.workspace.root_path || manualPath.trim(),
+        workspaceRootHash: result.workspace.root_path_hash || "",
+      });
+      setCurrentMatter(null, "");
+      await refreshOverview();
+      setError("");
+    } catch (err) {
+      setError(normalizeUiErrorMessage(err, "Klasör kaydedilemedi."));
+    } finally {
+      setIsSavingPath(false);
     }
   }
 
@@ -74,7 +104,7 @@ export function WorkspaceOverviewPanel() {
       await refreshOverview();
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : sozluk.workspace.scanError);
+      setError(normalizeUiErrorMessage(err, sozluk.workspace.scanError));
     } finally {
       setIsScanning(false);
     }
@@ -87,7 +117,7 @@ export function WorkspaceOverviewPanel() {
       setResult(response);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : sozluk.workspace.searchError);
+      setError(normalizeUiErrorMessage(err, sozluk.workspace.searchError));
     } finally {
       setIsSearching(false);
     }
@@ -100,98 +130,148 @@ export function WorkspaceOverviewPanel() {
   const isScanRunning = isScanning || (latestJob ? !["completed", "failed"].includes(latestJob.status) : false);
 
   return (
-    <div className="stack">
-      <SectionCard
-        title={sozluk.workspace.title}
-        subtitle={sozluk.workspace.subtitle}
-        actions={
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="button button--secondary" type="button" onClick={chooseRoot}>
-              {settings.workspaceConfigured ? sozluk.workspace.change : sozluk.workspace.choose}
-            </button>
-            <button className="button" type="button" onClick={() => triggerScan(false)} disabled={!settings.workspaceConfigured || isScanning}>
-              {isScanning ? sozluk.workspace.scanning : sozluk.workspace.rescan}
-            </button>
-          </div>
-        }
-      >
-        {hasWorkspace ? (
-          <div className="stack">
-            <div className="callout">
-              <strong>
-                {settings.currentMatterId
-                  ? sozluk.workspace.matterBridgeSelectedTitle
-                  : sozluk.workspace.matterBridgeIdleTitle}
-              </strong>
-              <p style={{ marginBottom: 0 }}>
-                {settings.currentMatterId
-                  ? `${settings.currentMatterLabel || "Seçili dosya"} açık. ${sozluk.workspace.matterBridgeSelectedDescription}`
-                  : sozluk.workspace.matterBridgeIdleDescription}
-              </p>
-            </div>
-            <div className="metric-grid">
-              <MetricCard label={sozluk.workspace.modeLabel} value={dagitimKipiEtiketi(settings.deploymentMode)} />
-              <MetricCard label={sozluk.workspace.documentCountLabel} value={documentCount} />
-              <MetricCard label={sozluk.workspace.lastScanLabel} value={latestJob ? new Date(latestJob.updated_at).toLocaleString("tr-TR") : sozluk.workspace.lastScanNever} />
-            </div>
-            <div className="callout callout--accent">
-              <strong>{overview?.workspace?.display_name}</strong>
-              <p style={{ marginBottom: 0 }}>{overview?.workspace?.root_path}</p>
-            </div>
-            {latestJob ? (
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <StatusBadge tone={latestJob.status === "completed" ? "accent" : latestJob.status === "failed" ? "danger" : "warning"}>
-                  {belgeDurumuEtiketi(latestJob.status)}
-                </StatusBadge>
-                <StatusBadge>{`${latestJob.files_indexed} indekslendi`}</StatusBadge>
-                <StatusBadge>{`${latestJob.files_failed} hata`}</StatusBadge>
-                <StatusBadge>{`${latestJob.files_skipped} atlandı`}</StatusBadge>
-              </div>
-            ) : null}
-            {isScanRunning ? (
-              <div className="callout">
-                <strong>{sozluk.workspace.scanInProgressTitle}</strong>
-                <p style={{ marginBottom: 0 }}>{sozluk.workspace.scanInProgressDescription}</p>
-              </div>
-            ) : null}
-            {isEmptyWorkspace ? (
-              <EmptyState title={sozluk.workspace.emptyFolderTitle} description={sozluk.workspace.emptyFolderDescription} />
-            ) : null}
-            {isEmptyWorkspace ? <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{sozluk.workspace.emptyFolderHint}</p> : null}
-          </div>
-        ) : (
-          <EmptyState
-            title={sozluk.workspace.notSelectedTitle}
-            description={sozluk.workspace.notSelectedDescription}
-          />
-        )}
-        {error ? <p style={{ color: "var(--danger)", marginBottom: 0 }}>{error}</p> : null}
-        <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{sozluk.workspace.rootPolicy}</p>
-      </SectionCard>
-
-      <SectionCard title={sozluk.workspace.searchTitle} subtitle={sozluk.workspace.searchSubtitle}>
-        {settings.workspaceConfigured ? (
-          <div className="stack">
-            <label className="stack stack--tight">
-              <span>{sozluk.workspace.searchLabel}</span>
-              <textarea
-                className="textarea"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={sozluk.workspace.searchPlaceholder}
-              />
-            </label>
-            <div className="toolbar">
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <StatusBadge tone="accent">{sozluk.workspace.selectedScope}</StatusBadge>
-                {overview?.workspace ? <StatusBadge>{overview.workspace.display_name}</StatusBadge> : null}
-              </div>
-              <button className="button" type="button" onClick={runSearch} disabled={!query.trim() || isSearching}>
-                {isSearching ? sozluk.workspace.searching : sozluk.workspace.runSearch}
+    <div className="page-grid page-grid--workspace">
+      <div className="stack">
+        <SectionCard
+          title={sozluk.workspace.title}
+          subtitle={sozluk.workspace.subtitle}
+          actions={
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {isDesktopApp ? (
+                <button className="button button--secondary" type="button" onClick={chooseRoot}>
+                  {settings.workspaceConfigured ? sozluk.workspace.change : sozluk.workspace.choose}
+                </button>
+              ) : null}
+              <button className="button" type="button" onClick={() => triggerScan(false)} disabled={!settings.workspaceConfigured || isScanning}>
+                {isScanning ? sozluk.workspace.scanning : sozluk.workspace.rescan}
               </button>
             </div>
-            {result ? (
-              <div className="stack">
+          }
+        >
+          {/* Aktif klasör göstergesi */}
+          {settings.workspaceConfigured && settings.workspaceRootPath ? (
+            <div className="callout callout--accent" style={{ marginBottom: "1rem" }}>
+              <strong>📂 Aktif çalışma klasörü</strong>
+              <p style={{ marginBottom: 0, fontFamily: "monospace", fontSize: "0.9rem" }}>
+                {settings.workspaceRootPath}
+              </p>
+            </div>
+          ) : null}
+
+          {/* Tarayıcıda manuel yol girişi */}
+          {!isDesktopApp ? (
+            <div className="field-grid" style={{ marginBottom: "1rem" }}>
+              <label className="stack stack--tight">
+                <span>Çalışma klasörü yolu</span>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <input
+                    className="input"
+                    value={manualPath}
+                    onChange={(e) => setManualPath(e.target.value)}
+                    placeholder="/home/kullanici/belgelerim veya C:\\Belgeler\\Dosyalar"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={setRootManually}
+                    disabled={!manualPath.trim() || isSavingPath}
+                  >
+                    {isSavingPath ? "Kaydediliyor..." : settings.workspaceConfigured ? "Klasörü değiştir" : "Klasörü kaydet"}
+                  </button>
+                </div>
+              </label>
+              <p style={{ color: "var(--text-muted)", marginBottom: 0, fontSize: "0.85rem" }}>
+                Sunucunun erişebildiği bir klasör yolunu girin. Masaüstü uygulamasında dosya seçici kullanılır.
+              </p>
+            </div>
+          ) : null}
+          {hasWorkspace ? (
+            <div className="stack">
+              <div className="callout">
+                <strong>
+                  {settings.currentMatterId
+                    ? sozluk.workspace.matterBridgeSelectedTitle
+                    : sozluk.workspace.matterBridgeIdleTitle}
+                </strong>
+                <p style={{ marginBottom: 0 }}>
+                  {settings.currentMatterId
+                    ? `${settings.currentMatterLabel || "Seçili dosya"} açık. ${sozluk.workspace.matterBridgeSelectedDescription}`
+                    : sozluk.workspace.matterBridgeIdleDescription}
+                </p>
+              </div>
+              <div className="metric-grid">
+                <MetricCard label={sozluk.workspace.modeLabel} value={dagitimKipiEtiketi(settings.deploymentMode)} />
+                <MetricCard label={sozluk.workspace.documentCountLabel} value={documentCount} />
+                <MetricCard label={sozluk.workspace.lastScanLabel} value={latestJob ? new Date(latestJob.updated_at).toLocaleString("tr-TR") : sozluk.workspace.lastScanNever} />
+              </div>
+              <div className="callout callout--accent">
+                <strong>{overview?.workspace?.display_name}</strong>
+                <p style={{ marginBottom: 0 }}>{overview?.workspace?.root_path}</p>
+              </div>
+              {latestJob ? (
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <StatusBadge tone={latestJob.status === "completed" ? "accent" : latestJob.status === "failed" ? "danger" : "warning"}>
+                    {belgeDurumuEtiketi(latestJob.status)}
+                  </StatusBadge>
+                  <StatusBadge>{`${latestJob.files_indexed} indekslendi`}</StatusBadge>
+                  <StatusBadge>{`${latestJob.files_failed} hata`}</StatusBadge>
+                  <StatusBadge>{`${latestJob.files_skipped} atlandı`}</StatusBadge>
+                </div>
+              ) : null}
+              {isScanRunning ? (
+                <div className="callout">
+                  <strong>{sozluk.workspace.scanInProgressTitle}</strong>
+                  <p style={{ marginBottom: 0 }}>{sozluk.workspace.scanInProgressDescription}</p>
+                </div>
+              ) : null}
+              {isEmptyWorkspace ? (
+                <>
+                  <EmptyState title={sozluk.workspace.emptyFolderTitle} description={sozluk.workspace.emptyFolderDescription} />
+                  <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{sozluk.workspace.emptyFolderHint}</p>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="stack">
+              <div className="callout callout--accent">
+                <strong>{sozluk.workspace.notSelectedTitle}</strong>
+                <p style={{ marginBottom: 0 }}>{sozluk.workspace.notSelectedDescription}</p>
+              </div>
+              <div className="metric-grid">
+                <MetricCard label={sozluk.workspace.modeLabel} value={dagitimKipiEtiketi(settings.deploymentMode)} />
+                <MetricCard label={sozluk.settings.modelProfile} value={modelProfilEtiketi(settings.selectedModelProfile)} />
+                <MetricCard label={sozluk.settings.providerStatusLabel} value={sozluk.settings.providerMissing} />
+              </div>
+            </div>
+          )}
+          {error ? <p style={{ color: "var(--danger)", marginBottom: 0 }}>{error}</p> : null}
+          <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{sozluk.workspace.rootPolicy}</p>
+        </SectionCard>
+
+        <SectionCard title={sozluk.workspace.searchTitle} subtitle={sozluk.workspace.searchSubtitle}>
+          {settings.workspaceConfigured ? (
+            <div className="stack">
+              <label className="stack stack--tight">
+                <span>{sozluk.workspace.searchLabel}</span>
+                <textarea
+                  className="textarea"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={sozluk.workspace.searchPlaceholder}
+                />
+              </label>
+              <div className="toolbar">
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <StatusBadge tone="accent">{sozluk.workspace.selectedScope}</StatusBadge>
+                  {overview?.workspace ? <StatusBadge>{overview.workspace.display_name}</StatusBadge> : null}
+                </div>
+                <button className="button" type="button" onClick={runSearch} disabled={!query.trim() || isSearching}>
+                  {isSearching ? sozluk.workspace.searching : sozluk.workspace.runSearch}
+                </button>
+              </div>
+              {result ? (
+                <div className="stack">
                 <div className="callout callout--accent">
                   <strong>{sozluk.workspace.summaryTitle}</strong>
                   <p style={{ marginBottom: 0, lineHeight: 1.6 }}>{result.answer}</p>
@@ -299,13 +379,63 @@ export function WorkspaceOverviewPanel() {
                     <EmptyState title={sozluk.workspace.draftSuggestionsEmptyTitle} description={sozluk.workspace.draftSuggestionsEmptyDescription} />
                   )}
                 </SectionCard>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="stack">
+              <EmptyState title={sozluk.workspace.chooseFirstTitle} description={sozluk.workspace.chooseFirstDescription} />
+              <div className="toolbar">
+                <button className="button" type="button" onClick={() => navigate("/settings")}>
+                  {sozluk.shell.setupBannerAction}
+                </button>
               </div>
-            ) : null}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+
+      <div className="stack">
+        <SectionCard title="Çalışma masası kısayolları" subtitle="İlk kurulum ve çekirdek erişimi artık yan ekranda değil, ana ürün yüzeyinin parçası.">
+          <div className="stack">
+            <div className="callout">
+              <strong>Ayarlar</strong>
+              <p style={{ marginBottom: "0.75rem" }}>Çalışma klasörü, model profili, sağlayıcı ve Telegram kurulumu artık Ayarlar ekranından yönetilir.</p>
+              <button className="button button--secondary" type="button" onClick={() => navigate("/settings")}>
+                Ayarlara git
+              </button>
+            </div>
+            <div className="callout">
+              <strong>Çekirdek</strong>
+              <p style={{ marginBottom: "0.75rem" }}>Arka plan işleri, bağlantılar ve son olaylar tek ekrandan izlenir.</p>
+              <button className="button button--secondary" type="button" onClick={() => navigate("/connectors")}>
+                Çekirdeği aç
+              </button>
+            </div>
           </div>
-        ) : (
-          <EmptyState title={sozluk.workspace.chooseFirstTitle} description={sozluk.workspace.chooseFirstDescription} />
-        )}
-      </SectionCard>
+        </SectionCard>
+
+        <SectionCard title="Şu anda ne yapılabilir?" subtitle="Kurulum durumuna göre GUI üzerinden erişebileceğiniz ana işler.">
+          <div className="list">
+            <article className="list-item">
+              <h3 className="list-item__title">Çalışma klasörünü sınırla</h3>
+              <p className="list-item__meta">Uygulama yalnız seçili klasör ve alt klasörlerine erişir.</p>
+            </article>
+            <article className="list-item">
+              <h3 className="list-item__title">Kaynak dayanaklı arama</h3>
+              <p className="list-item__meta">Arama, dayanak pasajları ve ilgili belgeleri ayrı bloklarda gösterir.</p>
+            </article>
+            <article className="list-item">
+              <h3 className="list-item__title">Benzer dosya tespiti</h3>
+              <p className="list-item__meta">Dosya adı, içerik, klasör bağlamı ve checksum sinyalleriyle açıklanabilir eşleşme üretir.</p>
+            </article>
+            <article className="list-item">
+              <h3 className="list-item__title">Türkçe hukuk iş akışları</h3>
+              <p className="list-item__meta">Taslak, risk notu, görev ve zaman çizelgesi iş akışları GUI üzerinden kullanılır.</p>
+            </article>
+          </div>
+        </SectionCard>
+      </div>
     </div>
   );
 }

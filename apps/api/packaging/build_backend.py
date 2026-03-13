@@ -92,6 +92,8 @@ def main() -> None:
         str(api_root),
         "--add-data",
         f"{project_root / 'configs' / 'model-profiles.json'}{';' if args.target_platform == 'win32' else ':'}configs",
+        "--add-data",
+        f"{api_root / 'lawcopilot_api' / 'openclaw_assets'}{';' if args.target_platform == 'win32' else ':'}lawcopilot_api/openclaw_assets",
         "--collect-submodules",
         "lawcopilot_api",
         "--collect-submodules",

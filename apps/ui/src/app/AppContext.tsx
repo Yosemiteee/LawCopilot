@@ -6,6 +6,7 @@ export type AppSettings = {
   baseUrl: string;
   token: string;
   deploymentMode: string;
+  themeMode: "system" | "light" | "dark";
   selectedModelProfile: string;
   currentMatterId: number | null;
   currentMatterLabel: string;
@@ -30,6 +31,7 @@ const defaultSettings: AppSettings = {
   baseUrl: "http://127.0.0.1:8000",
   token: "",
   deploymentMode: "local-only",
+  themeMode: "system",
   selectedModelProfile: "hybrid",
   currentMatterId: null,
   currentMatterLabel: "",
@@ -51,7 +53,18 @@ function readStoredSettings(): AppSettings {
     return defaultSettings;
   }
   try {
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const themeMode = parsed?.themeMode === "light" || parsed?.themeMode === "dark" || parsed?.themeMode === "system"
+      ? parsed.themeMode
+      : defaultSettings.themeMode;
+    return {
+      ...defaultSettings,
+      ...parsed,
+      themeMode,
+      // Matter selection is route/session state, not durable workspace configuration.
+      currentMatterId: null,
+      currentMatterLabel: "",
+    };
   } catch {
     return defaultSettings;
   }
@@ -61,8 +74,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = useState<AppSettings>(readStoredSettings);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    const { currentMatterId: _currentMatterId, currentMatterLabel: _currentMatterLabel, ...persisted } = settings;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   }, [settings]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+
+    function applyTheme() {
+      const resolvedTheme = settings.themeMode === "system"
+        ? (mediaQuery?.matches ? "dark" : "light")
+        : settings.themeMode;
+      document.documentElement.dataset.theme = resolvedTheme;
+      document.documentElement.dataset.themeMode = settings.themeMode;
+      document.documentElement.style.colorScheme = resolvedTheme;
+    }
+
+    applyTheme();
+    mediaQuery?.addEventListener?.("change", applyTheme);
+    return () => {
+      mediaQuery?.removeEventListener?.("change", applyTheme);
+    };
+  }, [settings.themeMode]);
 
   useEffect(() => {
     let active = true;
@@ -83,6 +116,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         baseUrl: String((runtimeInfo as Record<string, unknown>)?.apiBaseUrl || (storedConfig as Record<string, unknown>)?.apiBaseUrl || prev.baseUrl),
         token: String((runtimeInfo as Record<string, unknown>)?.sessionToken || prev.token),
         deploymentMode: String((runtimeInfo as Record<string, unknown>)?.deploymentMode || (storedConfig as Record<string, unknown>)?.deploymentMode || prev.deploymentMode),
+        themeMode: (["system", "light", "dark"].includes(String((storedConfig as Record<string, unknown>)?.themeMode))
+          ? String((storedConfig as Record<string, unknown>)?.themeMode)
+          : prev.themeMode) as AppSettings["themeMode"],
         selectedModelProfile: String((runtimeInfo as Record<string, unknown>)?.default_model_profile || (storedConfig as Record<string, unknown>)?.selectedModelProfile || prev.selectedModelProfile),
         officeId: String((runtimeInfo as Record<string, unknown>)?.officeId || (storedConfig as Record<string, unknown>)?.officeId || prev.officeId),
         releaseChannel: String((runtimeInfo as Record<string, unknown>)?.releaseChannel || (storedConfig as Record<string, unknown>)?.releaseChannel || prev.releaseChannel),

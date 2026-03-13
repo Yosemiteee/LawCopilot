@@ -2,6 +2,28 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
+function normalizeGoogleScopes(scopes) {
+  const defaults = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/drive.readonly",
+  ];
+  const merged = [];
+  for (const scope of [...defaults, ...(Array.isArray(scopes) ? scopes : [])]) {
+    const value = String(scope || "").trim();
+    if (!value || merged.includes(value)) {
+      continue;
+    }
+    merged.push(value);
+  }
+  return merged;
+}
+
 function parseEnvFile(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
     return {};
@@ -49,7 +71,11 @@ function backendEnv(config, runtimePaths) {
   const fileEnv = parseEnvFile(config.envFile);
   const storageRoot = config.storagePath || runtimePaths.artifactsRoot;
   const provider = config.provider || {};
+  const google = config.google || {};
   const telegram = config.telegram || {};
+  const googleScopes = normalizeGoogleScopes(google.scopes);
+  const providerConfigured = Boolean(provider.apiKey || provider.oauthConnected || provider.type === "ollama");
+  const openclawEnabled = provider.type === "openai-codex";
   return {
     ...process.env,
     ...fileEnv,
@@ -68,7 +94,17 @@ function backendEnv(config, runtimePaths) {
     LAWCOPILOT_PROVIDER_BASE_URL: provider.baseUrl || "",
     LAWCOPILOT_PROVIDER_MODEL: provider.model || "",
     LAWCOPILOT_PROVIDER_API_KEY: provider.apiKey || "",
-    LAWCOPILOT_PROVIDER_CONFIGURED: provider.apiKey || provider.type === "ollama" ? "true" : "false",
+    LAWCOPILOT_PROVIDER_CONFIGURED: providerConfigured ? "true" : "false",
+    LAWCOPILOT_OPENCLAW_STATE_DIR: openclawEnabled ? path.join(storageRoot, "openclaw-state") : "",
+    LAWCOPILOT_OPENCLAW_IMAGE: openclawEnabled ? (process.env.LAWCOPILOT_OPENCLAW_IMAGE || "openclaw-local:chromium") : "",
+    LAWCOPILOT_OPENCLAW_TIMEOUT: openclawEnabled ? (process.env.LAWCOPILOT_OPENCLAW_TIMEOUT || "75") : "",
+    LAWCOPILOT_GOOGLE_ENABLED: google.enabled ? "true" : "false",
+    LAWCOPILOT_GOOGLE_CONFIGURED: google.oauthConnected && google.accessToken ? "true" : "false",
+    LAWCOPILOT_GOOGLE_ACCOUNT_LABEL: google.accountLabel || "",
+    LAWCOPILOT_GOOGLE_SCOPES: googleScopes.join(","),
+    LAWCOPILOT_GMAIL_CONNECTED: google.oauthConnected && googleScopes.some((scope) => String(scope).includes("gmail")) ? "true" : "false",
+    LAWCOPILOT_CALENDAR_CONNECTED: google.oauthConnected && googleScopes.some((scope) => String(scope).includes("calendar")) ? "true" : "false",
+    LAWCOPILOT_DRIVE_CONNECTED: google.oauthConnected && googleScopes.some((scope) => String(scope).includes("drive")) ? "true" : "false",
     LAWCOPILOT_TELEGRAM_ENABLED: telegram.enabled ? "true" : "false",
     LAWCOPILOT_TELEGRAM_BOT_TOKEN: telegram.botToken || "",
     LAWCOPILOT_TELEGRAM_BOT_USERNAME: telegram.botUsername || "",

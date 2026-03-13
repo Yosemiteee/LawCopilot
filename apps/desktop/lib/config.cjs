@@ -6,6 +6,29 @@ function repoRootFrom(baseDir) {
   return path.resolve(baseDir, "..", "..", "..");
 }
 
+const DEFAULT_GOOGLE_SCOPES = [
+  "openid",
+  "email",
+  "profile",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/drive.readonly",
+];
+
+function normalizeGoogleScopes(scopes) {
+  const merged = [];
+  for (const scope of [...DEFAULT_GOOGLE_SCOPES, ...(Array.isArray(scopes) ? scopes : [])]) {
+    const value = String(scope || "").trim();
+    if (!value || merged.includes(value)) {
+      continue;
+    }
+    merged.push(value);
+  }
+  return merged;
+}
+
 function defaultDesktopConfig(repoRoot, options = {}) {
   const artifactsRoot = options.storagePath || path.join(repoRoot, "artifacts");
   return {
@@ -15,6 +38,7 @@ function defaultDesktopConfig(repoRoot, options = {}) {
     deploymentMode: process.env.LAWCOPILOT_DEPLOYMENT_MODE || "local-only",
     releaseChannel: process.env.LAWCOPILOT_RELEASE_CHANNEL || "pilot",
     locale: "tr",
+    themeMode: "system",
     selectedModelProfile: process.env.LAWCOPILOT_DEFAULT_MODEL_PROFILE || "hybrid",
     apiHost: "127.0.0.1",
     apiPort: 18731,
@@ -28,12 +52,31 @@ function defaultDesktopConfig(repoRoot, options = {}) {
     workspaceRootHash: "",
     provider: {
       type: "openai",
+      authMode: "api-key",
       baseUrl: "https://api.openai.com/v1",
       model: "gpt-4.1-mini",
       apiKey: "",
+      accountLabel: "OpenAI API",
+      availableModels: [],
+      oauthConnected: false,
+      oauthLastError: "",
       configuredAt: "",
       lastValidatedAt: "",
       validationStatus: "pending",
+    },
+    google: {
+      enabled: false,
+      accountLabel: "",
+      scopes: [...DEFAULT_GOOGLE_SCOPES],
+      oauthConnected: false,
+      oauthLastError: "",
+      configuredAt: "",
+      lastValidatedAt: "",
+      validationStatus: "pending",
+      accessToken: "",
+      refreshToken: "",
+      tokenType: "",
+      expiryDate: "",
     },
     telegram: {
       enabled: false,
@@ -50,6 +93,7 @@ function defaultDesktopConfig(repoRoot, options = {}) {
 function mergeDesktopConfig(current, patch) {
   const next = { ...current, ...patch };
   next.provider = { ...(current.provider || {}), ...(patch.provider || {}) };
+  next.google = { ...(current.google || {}), ...(patch.google || {}) };
   next.telegram = { ...(current.telegram || {}), ...(patch.telegram || {}) };
   return next;
 }
@@ -67,18 +111,37 @@ function maskSecret(value) {
 
 function sanitizeDesktopConfig(config) {
   const provider = config.provider || {};
+  const google = config.google || {};
   const telegram = config.telegram || {};
   return {
     ...config,
     provider: {
       type: provider.type || "openai",
+      authMode: provider.authMode || (provider.type === "openai-codex" ? "oauth" : "api-key"),
       baseUrl: provider.baseUrl || "",
       model: provider.model || "",
+      accountLabel: provider.accountLabel || "",
+      availableModels: Array.isArray(provider.availableModels) ? provider.availableModels : [],
+      oauthConnected: Boolean(provider.oauthConnected),
+      oauthLastError: provider.oauthLastError || "",
       configuredAt: provider.configuredAt || "",
       lastValidatedAt: provider.lastValidatedAt || "",
       validationStatus: provider.validationStatus || "pending",
       apiKeyConfigured: Boolean(provider.apiKey),
       apiKeyMasked: maskSecret(provider.apiKey),
+    },
+    google: {
+      enabled: Boolean(google.enabled),
+      accountLabel: google.accountLabel || "",
+      scopes: normalizeGoogleScopes(google.scopes),
+      oauthConnected: Boolean(google.oauthConnected),
+      oauthLastError: google.oauthLastError || "",
+      configuredAt: google.configuredAt || "",
+      lastValidatedAt: google.lastValidatedAt || "",
+      validationStatus: google.validationStatus || "pending",
+      accessTokenConfigured: Boolean(google.accessToken),
+      refreshTokenConfigured: Boolean(google.refreshToken),
+      clientIdConfigured: Boolean(process.env.LAWCOPILOT_GOOGLE_CLIENT_ID),
     },
     telegram: {
       enabled: Boolean(telegram.enabled),

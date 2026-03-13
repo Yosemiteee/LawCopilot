@@ -13,6 +13,7 @@ import { StatusBadge } from "../common/StatusBadge";
 export function RiskNotesPanel({ matterId }: { matterId: number }) {
   const { settings } = useAppContext();
   const [items, setItems] = useState<RiskNote[]>([]);
+  const [overview, setOverview] = useState("");
   const [matterDocuments, setMatterDocuments] = useState<MatterDocument[]>([]);
   const [workspaceDocuments, setWorkspaceDocuments] = useState<MatterWorkspaceDocumentLink[]>([]);
   const [error, setError] = useState("");
@@ -25,6 +26,7 @@ export function RiskNotesPanel({ matterId }: { matterId: number }) {
     ])
       .then(([riskResponse, documentResponse, workspaceResponse]) => {
         setItems(riskResponse.items);
+        setOverview(riskResponse.ai_overview || "");
         setMatterDocuments(documentResponse.items);
         setWorkspaceDocuments(workspaceResponse.items);
         setError("");
@@ -45,7 +47,14 @@ export function RiskNotesPanel({ matterId }: { matterId: number }) {
       {error ? (
         <p style={{ color: "var(--danger)" }}>{error}</p>
       ) : items.length ? (
-        <div className="list">
+        <div className="stack">
+          {overview ? (
+            <div className="callout callout--accent">
+              <strong>Hızlı inceleme özeti</strong>
+              <p style={{ marginBottom: 0, lineHeight: 1.6 }}>{overview}</p>
+            </div>
+          ) : null}
+          <div className="list">
           {items.map((item, index) => (
             <article className="list-item" key={`${item.category}-${index}`}>
               <div className="toolbar">
@@ -67,6 +76,7 @@ export function RiskNotesPanel({ matterId }: { matterId: number }) {
               />
             </article>
           ))}
+          </div>
         </div>
       ) : (
         <EmptyState title="Henüz risk notu yok" description="Eksik tarih, eksik belge, iddia dili veya süre baskısı görüldüğünde risk notu oluşur." />

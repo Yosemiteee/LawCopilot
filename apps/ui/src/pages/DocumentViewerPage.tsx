@@ -311,7 +311,7 @@ export function DocumentViewerPage() {
         </SectionCard>
       </div>
 
-      <SectionCard title="Parça gezgini" subtitle="Belgedeki normalleştirilmiş metin parçaları arasında doğrudan geçiş yapın.">
+      <SectionCard className="document-viewer__aside-card" title="Parça gezgini" subtitle="Belgedeki normalleştirilmiş metin parçaları arasında doğrudan geçiş yapın.">
         {chunks.length ? (
           <div className="list">
             {chunks.map((chunk, index) => {

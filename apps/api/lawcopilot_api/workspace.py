@@ -36,10 +36,10 @@ LINUX_SYSTEM_ROOTS = {
     "sbin",
     "srv",
     "sys",
-    "usr",
-    "var",
-    "home",
 }
+# These roots are blocked at shallow depth only (e.g. /home itself, /home/sami)
+# but deeper paths like /home/sami/belgelerim are allowed.
+LINUX_SHALLOW_ROOTS = {"home", "usr", "var"}
 
 
 def _contains_turkish_chars(text: str) -> bool:
@@ -82,7 +82,11 @@ def validate_workspace_root(raw_path: str, *, platform: str | None = None) -> Pa
             raise ValueError("Disk kökleri çalışma klasörü olarak seçilemez.")
         first = resolved.parts[1].lower() if len(resolved.parts) > 1 else ""
         if first in WINDOWS_SYSTEM_ROOTS:
-            raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
+            # Allow Users/username/subfolder (depth >= 4)
+            if first == "users" and len(resolved.parts) >= 4:
+                pass  # e.g. C:\Users\sami\Documents — allowed
+            else:
+                raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
         if str(resolved).startswith("\\\\"):
             raise ValueError("Ağ paylaşımları ilk sürümde desteklenmiyor.")
     elif active_platform == "darwin":
@@ -90,13 +94,22 @@ def validate_workspace_root(raw_path: str, *, platform: str | None = None) -> Pa
             raise ValueError("Disk kökleri çalışma klasörü olarak seçilemez.")
         first = resolved.parts[1].lower() if len(resolved.parts) > 1 else ""
         if first in MAC_SYSTEM_ROOTS:
-            raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
+            # Allow /Users/username/subfolder (depth >= 4)
+            if first == "users" and len(resolved.parts) >= 4:
+                pass
+            else:
+                raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
     else:
         if str(resolved) == "/":
             raise ValueError("Disk kökleri çalışma klasörü olarak seçilemez.")
         first = resolved.parts[1].lower() if len(resolved.parts) > 1 else ""
         if first in LINUX_SYSTEM_ROOTS:
             raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
+        if first in LINUX_SHALLOW_ROOTS:
+            # /home → blocked, /home/sami → blocked (user home, already caught above)
+            # /home/sami/Documents → allowed (depth >= 4: /, home, sami, Documents)
+            if len(resolved.parts) < 4:
+                raise ValueError("Sistem klasörleri çalışma klasörü olarak seçilemez.")
 
     return resolved
 

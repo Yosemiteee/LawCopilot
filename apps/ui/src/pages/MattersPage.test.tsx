@@ -38,7 +38,7 @@ describe("MattersPage", () => {
       }
     });
 
-    renderApp(["/matters"]);
+    renderApp(["/_embedded/matters"]);
 
     await waitFor(() => expect(screen.getByText("Kira uyuşmazlığı")).toBeInTheDocument());
     expect(screen.getByText("Yeni dosya oluştur")).toBeInTheDocument();

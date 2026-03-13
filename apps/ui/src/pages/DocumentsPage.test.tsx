@@ -144,7 +144,7 @@ describe("DocumentsPage", () => {
       }
     });
 
-    renderApp(["/documents"], {
+    renderApp(["/_embedded/documents"], {
       storedSettings: { workspaceConfigured: true, workspaceRootName: "Deneme Belgeleri" }
     });
 

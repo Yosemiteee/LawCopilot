@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 
 import { buildCitationTarget, buildDocumentViewerPath } from "../../lib/documentViewer";
 import { useAppContext } from "../../app/AppContext";
-import { destekSeviyesiEtiketi, modelProfilEtiketi } from "../../lib/labels";
-import { getModelProfiles, searchMatter } from "../../services/lawcopilotApi";
-import type { SearchResponse } from "../../types/domain";
+import { atifKaliteEtiketi, destekSeviyesiEtiketi, modelProfilEtiketi } from "../../lib/labels";
+import { getModelProfiles, reviewCitations, searchMatter } from "../../services/lawcopilotApi";
+import type { CitationReviewResponse, SearchResponse } from "../../types/domain";
 import { EmptyState } from "../common/EmptyState";
 import { SectionCard } from "../common/SectionCard";
 import { StatusBadge } from "../common/StatusBadge";
@@ -16,6 +16,7 @@ export function SearchWorkbench({ matterId, heading = "Dosya araması" }: { matt
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<SearchResponse | null>(null);
+  const [citationReview, setCitationReview] = useState<CitationReviewResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [defaultProfile, setDefaultProfile] = useState("local");
@@ -43,6 +44,12 @@ export function SearchWorkbench({ matterId, heading = "Dosya araması" }: { matt
       });
       setResult(response);
       setError("");
+      setCitationReview(null);
+      if (response.answer) {
+        reviewCitations(settings, { answer: response.answer })
+          .then((review) => setCitationReview(review))
+          .catch(() => undefined);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Arama yapılamadı.");
     } finally {
@@ -105,7 +112,27 @@ export function SearchWorkbench({ matterId, heading = "Dosya araması" }: { matt
                 <div className="metric-card__label">Kapsama</div>
                 <div className="metric-card__value">{result.source_coverage}</div>
               </div>
+              {citationReview ? (
+                <div className="metric-card">
+                  <div className="metric-card__label">Kaynak kalitesi</div>
+                  <div className="metric-card__value">
+                    <StatusBadge tone={citationReview.grade === "A" ? "accent" : citationReview.grade === "B" ? "warning" : "danger"}>
+                      {atifKaliteEtiketi(citationReview.grade)}
+                    </StatusBadge>
+                  </div>
+                </div>
+              ) : null}
             </div>
+            {citationReview?.recommendations?.length ? (
+              <div className="callout" style={{ marginTop: "1rem" }}>
+                <strong>Kaynak önerileri</strong>
+                <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem" }}>
+                  {citationReview.recommendations.map((rec, i) => (
+                    <li key={i} style={{ lineHeight: 1.6 }}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </SectionCard>
 
           <SectionCard title="Destekleyici alıntılar" subtitle="Belge pasajları, asistan özetinden ayrı tutulur.">

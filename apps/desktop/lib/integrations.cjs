@@ -4,6 +4,13 @@ function normalizeBaseUrl(value, fallback) {
 }
 
 function providerDefaults(type) {
+  if (type === "openai-codex") {
+    return {
+      type: "openai-codex",
+      baseUrl: "oauth://openai-codex",
+      model: "openai-codex/gpt-5.3-codex",
+    };
+  }
   if (type === "ollama") {
     return {
       type: "ollama",
@@ -60,6 +67,10 @@ async function validateProviderConfig(input) {
   const baseUrl = normalizeBaseUrl(input?.baseUrl, defaults.baseUrl);
   const model = String(input?.model || defaults.model || "").trim();
   const apiKey = String(input?.apiKey || "").trim();
+
+  if (type === "openai-codex") {
+    throw new Error("Codex hesap oturumu için tarayıcı tabanlı OAuth akışını kullanın.");
+  }
 
   if (type !== "ollama" && !apiKey) {
     throw new Error("Sağlayıcı doğrulaması için API anahtarı gerekli.");

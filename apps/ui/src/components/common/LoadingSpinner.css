@@ -1,0 +1,27 @@
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) 0;
+}
+
+.loading-spinner__ring {
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 3px solid var(--line-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: lc-spin 0.7s linear infinite;
+}
+
+.loading-spinner__label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+@keyframes lc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

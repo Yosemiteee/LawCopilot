@@ -1,9 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="tr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LawCopilot Workbench</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>LawCopilot</title>
+    <script>
+      (function () {
+        try {
+          var raw = window.localStorage.getItem("lawcopilot.ui.settings");
+          var parsed = raw ? JSON.parse(raw) : {};
+          var themeMode = parsed && parsed.themeMode ? parsed.themeMode : "system";
+          var resolved = themeMode === "system"
+            ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+            : themeMode;
+          document.documentElement.dataset.themeMode = themeMode;
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.style.colorScheme = resolved;
+        } catch (_error) {
+          document.documentElement.dataset.themeMode = "system";
+          document.documentElement.dataset.theme = "light";
+          document.documentElement.style.colorScheme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

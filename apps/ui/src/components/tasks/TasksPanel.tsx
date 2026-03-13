@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { useAppContext } from "../../app/AppContext";
 import { gorevDurumuEtiketi, oncelikEtiketi, sistemKaynagiEtiketi } from "../../lib/labels";
-import { createMatterTask, getMatterTaskRecommendations, listMatterTasks } from "../../services/lawcopilotApi";
+import { createMatterTask, getMatterTaskRecommendations, listMatterTasks, updateTaskDue, updateTaskStatus } from "../../services/lawcopilotApi";
 import type { Task, TaskRecommendation } from "../../types/domain";
 import { EmptyState } from "../common/EmptyState";
 import { SectionCard } from "../common/SectionCard";
@@ -61,6 +61,32 @@ export function TasksPanel({ matterId }: { matterId: number }) {
       setError(err instanceof Error ? err.message : "Öneri görevleştirilemedi.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleStatusUpdate(taskId: number, status: string) {
+    try {
+      const result = await updateTaskStatus(settings, taskId, status);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? result.task : t))
+      );
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Durum güncellenemedi.");
+    }
+  }
+
+  async function handleDueUpdate(taskId: number) {
+    const input = window.prompt("Yeni son tarih (YYYY-MM-DDThh:mm:ssZ):");
+    if (!input) return;
+    try {
+      const result = await updateTaskDue(settings, taskId, input);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? result.task : t))
+      );
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tarih güncellenemedi.");
     }
   }
 
@@ -157,6 +183,17 @@ export function TasksPanel({ matterId }: { matterId: number }) {
                   {task.due_at ? `${new Date(task.due_at).toLocaleString("tr-TR")} · ` : ""}
                   {task.explanation || "Açıklama kaydı yok."}
                 </p>
+                {task.status !== "completed" ? (
+                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+                    {task.status === "open" ? (
+                      <button className="button button--ghost" type="button" onClick={() => handleStatusUpdate(task.id, "in_progress")} style={{ padding: "0.35rem 0.7rem", fontSize: "0.8rem" }}>Başlat</button>
+                    ) : null}
+                    {task.status === "in_progress" ? (
+                      <button className="button button--ghost" type="button" onClick={() => handleStatusUpdate(task.id, "completed")} style={{ padding: "0.35rem 0.7rem", fontSize: "0.8rem" }}>Tamamla</button>
+                    ) : null}
+                    <button className="button button--ghost" type="button" onClick={() => handleDueUpdate(task.id)} style={{ padding: "0.35rem 0.7rem", fontSize: "0.8rem" }}>Tarih güncelle</button>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

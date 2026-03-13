@@ -17,11 +17,24 @@ function buildUrl(baseUrl: string, path: string) {
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    console.error("Failed to parse JSON response:", text);
+    throw new Error("Sunucudan geçerli yanıt alınamadı.");
+  }
   if (!response.ok) {
     throw new ApiError(data.detail || data.message || "API isteği başarısız oldu.", response.status);
   }
   return data as T;
+}
+
+async function ensureDesktopBackend(): Promise<void> {
+  if (!window.lawcopilotDesktop?.ensureBackend) {
+    throw new Error("Yerel servis erişilemiyor.");
+  }
+  await window.lawcopilotDesktop.ensureBackend({ forceRestart: true });
 }
 
 export async function apiRequest<T>(settings: AppSettings, path: string, init: RequestInit = {}): Promise<T> {
@@ -32,9 +45,23 @@ export async function apiRequest<T>(settings: AppSettings, path: string, init: R
   if (settings.token) {
     headers.set("Authorization", `Bearer ${settings.token}`);
   }
-  const response = await fetch(buildUrl(settings.baseUrl, path), {
-    ...init,
-    headers
-  });
+  const url = buildUrl(settings.baseUrl, path);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers
+    });
+  } catch (error) {
+    try {
+      await ensureDesktopBackend();
+      response = await fetch(url, {
+        ...init,
+        headers
+      });
+    } catch {
+      throw new Error("Yerel servis erişilemiyor. Uygulamayı yeniden açın veya Çekirdek ekranından durumu yenileyin.");
+    }
+  }
   return parseResponse<T>(response);
 }

@@ -24,6 +24,21 @@ export function modelProfilEtiketi(value?: string | null) {
   }
 }
 
+export function saglayiciTuruEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "openai-codex":
+      return "OpenAI hesabı (Codex)";
+    case "openai":
+      return "OpenAI API";
+    case "openai-compatible":
+      return "OpenAI uyumlu sağlayıcı";
+    case "ollama":
+      return "Yerel Ollama";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
 export function surumKanaliEtiketi(value?: string | null) {
   switch ((value || "").toLowerCase()) {
     case "pilot":
@@ -102,6 +117,30 @@ export function gorevDurumuEtiketi(value?: string | null) {
 
 export function sistemKaynagiEtiketi(value?: string | null) {
   switch ((value || "").toLowerCase()) {
+    case "openclaw_runtime+rag":
+      return "Codex destekli genel arama";
+    case "direct_provider+rag":
+      return "Doğrudan sağlayıcı ile genel arama";
+    case "openclaw_runtime+matter_document_memory":
+      return "Codex destekli dosya araması";
+    case "direct_provider+matter_document_memory":
+      return "Doğrudan sağlayıcı ile dosya araması";
+    case "direct_provider+assistant_actions":
+      return "Doğrudan sağlayıcı ile taslak aksiyon";
+    case "direct_provider+assistant_thread":
+      return "Doğrudan sağlayıcı ile asistan yanıtı";
+    case "openclaw_runtime+matter_workflow_engine":
+      return "Codex destekli iş akışı";
+    case "direct_provider+matter_workflow_engine":
+      return "Doğrudan sağlayıcı ile iş akışı";
+    case "openclaw_runtime+workspace_document_memory":
+      return "Codex destekli çalışma alanı araması";
+    case "direct_provider+workspace_document_memory":
+      return "Doğrudan sağlayıcı ile çalışma alanı araması";
+    case "openclaw_runtime+workspace_similarity":
+      return "Codex destekli benzerlik";
+    case "direct_provider+workspace_similarity":
+      return "Doğrudan sağlayıcı ile benzerlik";
     case "workflow_engine":
       return "İş akışı motoru";
     case "matter_record":
@@ -118,6 +157,38 @@ export function sistemKaynagiEtiketi(value?: string | null) {
       return "Dosya belge hafızası";
     default:
       return value || "Belirsiz";
+  }
+}
+
+export function uretimDurumuEtiketi(value?: string | null) {
+  if ((value || "").toLowerCase().includes("openclaw_runtime")) {
+    return "Codex ile üretildi";
+  }
+  if ((value || "").toLowerCase().includes("direct_provider")) {
+    return "Doğrudan sağlayıcı ile üretildi";
+  }
+  if (value) {
+    return "Yerleşik fallback";
+  }
+  return "Belirsiz";
+}
+
+export function runtimeDurumuEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "codex":
+    case "openclaw_runtime_used":
+      return "Codex etkin";
+    case "fallback":
+    case "openclaw_runtime_fallback":
+      return "Fallback kullanıldı";
+    case "direct-provider":
+    case "direct_provider_runtime_used":
+      return "Doğrudan sağlayıcı etkin";
+    case "direct-fallback":
+    case "direct_provider_runtime_fallback":
+      return "Sağlayıcı fallback";
+    default:
+      return "Henüz çağrı yok";
   }
 }
 
@@ -266,11 +337,83 @@ export function kanalEtiketi(value?: string | null) {
       return "İç kullanım";
     case "email":
       return "E-posta";
+    case "telegram":
+      return "Telegram";
     case "client_portal":
       return "Müvekkil portalı";
     default:
       return value || "Belirsiz";
   }
+}
+
+export function ajandaTipiEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "overdue_task":
+      return "Geciken iş";
+    case "due_today":
+      return "Bugün";
+    case "reply_needed":
+      return "Yanıt bekliyor";
+    case "calendar_prep":
+      return "Takvim hazırlığı";
+    case "personal_date":
+      return "Önemli tarih";
+    default:
+      return value || "Ajanda";
+  }
+}
+
+export function asistanAksiyonTipiEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "prepare_client_update":
+      return "Müvekkil güncellemesi";
+    case "prepare_internal_summary":
+      return "İç ekip özeti";
+    case "send_email":
+      return "E-posta hazırla";
+    case "reply_email":
+      return "E-posta yanıtı";
+    case "send_telegram_message":
+      return "Telegram yanıtı";
+    case "create_task":
+      return "Görev önerisi";
+    default:
+      return value || "Aksiyon";
+  }
+}
+
+export function asistanAksiyonDurumuEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "suggested":
+      return "Önerildi";
+    case "pending_review":
+      return "İnceleme bekliyor";
+    case "approved":
+      return "Onaylandı";
+    case "dismissed":
+      return "Kapatıldı";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
+export function disIletisimDurumuEtiketi(approvalStatus?: string | null, deliveryStatus?: string | null) {
+  if ((deliveryStatus || "").toLowerCase() === "sent") {
+    return "Gönderildi";
+  }
+  if ((deliveryStatus || "").toLowerCase() === "ready_to_send") {
+    return "Gönderime hazır";
+  }
+  if ((deliveryStatus || "").toLowerCase() === "manual_review_only") {
+    return "Manuel inceleme";
+  }
+  if ((approvalStatus || "").toLowerCase() === "approved") {
+    return "Onaylandı";
+  }
+  if ((approvalStatus || "").toLowerCase() === "dismissed") {
+    return "İptal edildi";
+  }
+  return "Onay bekliyor";
 }
 
 export function gerceklikEtiketi(value?: string | null) {
@@ -326,4 +469,85 @@ export function kisaDosyaBoyutu(value: number) {
     return `${Math.round(value / 1024)} KB`;
   }
   return `${value} B`;
+}
+
+export function notTipiEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "working_note":
+      return "Çalışma notu";
+    case "client_note":
+      return "Müvekkil notu";
+    case "internal_note":
+      return "İç not";
+    case "risk_note":
+      return "Risk notu";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
+export function epostaTaslakDurumuEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "draft":
+      return "Taslak";
+    case "approved":
+      return "Onaylandı";
+    case "retracted":
+      return "Geri çekildi";
+    case "sent":
+      return "Gönderildi";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
+export function sosyalMedyaKaynakEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "x":
+      return "X (Twitter)";
+    case "linkedin":
+      return "LinkedIn";
+    case "instagram":
+      return "Instagram";
+    case "news":
+      return "Haber";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
+export function riskSkoruEtiketi(score: number): { label: string; tone: "accent" | "warning" | "danger" } {
+  if (score >= 0.7) return { label: "Yüksek risk", tone: "danger" };
+  if (score >= 0.4) return { label: "Orta risk", tone: "warning" };
+  return { label: "Düşük risk", tone: "accent" };
+}
+
+export function atifKaliteEtiketi(grade?: string | null) {
+  switch ((grade || "").toUpperCase()) {
+    case "A":
+      return "Güçlü kaynak";
+    case "B":
+      return "Yeterli kaynak";
+    case "C":
+      return "Zayıf kaynak";
+    default:
+      return grade || "Belirsiz";
+  }
+}
+
+export function sorguIsleviDurumuEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "pending":
+      return "Bekliyor";
+    case "running":
+      return "Çalışıyor";
+    case "completed":
+      return "Tamamlandı";
+    case "failed":
+      return "Başarısız";
+    case "cancelled":
+      return "İptal edildi";
+    default:
+      return value || "Belirsiz";
+  }
 }

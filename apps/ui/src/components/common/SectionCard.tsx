@@ -2,15 +2,17 @@ export function SectionCard({
   title,
   subtitle,
   actions,
-  children
+  children,
+  className
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="card">
+    <section className={className ? `card ${className}` : "card"}>
       <div className="card__header">
         <div className="toolbar">
           <div>

@@ -11,6 +11,8 @@ Sorumluluklar:
 - gömülü backend ikilisini başlatmak
 - arayüz dist çıktısını yüklemek
 - işletim sistemi seviyesinde güvenli klasör açma / gösterme işlemleri yapmak
+- Codex ve Google OAuth akışlarını tarayıcıda başlatmak
+- Google Gmail/Takvim sinyallerini yerel backend'e eşitlemek
 
 Temel kararlar:
 - Electron kullanılır
@@ -28,6 +30,8 @@ Sorumluluklar:
 - dosya adı, içerik, belge türü, checksum ve klasör bağlamı ile açıklanabilir benzer dosya tespiti
 - dosyaya çalışma alanı belgesi bağlama
 - telemetri ve yapılandırılmış olay günlüğü
+- Gmail thread mirror, takvim mirror, asistan ajandası ve önerilen aksiyonlar
+- açık onaylı dış iletişim dispatch akışları
 
 ### 3. Arayüz `apps/ui`
 Sorumluluklar:
@@ -37,9 +41,46 @@ Sorumluluklar:
 - belge listesi ve benzer dosya görünümü
 - belge görüntüleyici, alıntı atlama ve pasaj vurgulama
 - kaynak dayanaklı arama
+- günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonlar
+- kanal bağımsız taslak merkezi
 - dikkat edilmesi gereken noktalar, eksik belge sinyalleri ve taslak önerileri
 - görev, taslak, risk notu ve kronoloji yüzeyleri
 - çalışma modu ve güvenlik görünürlüğü
+
+## Entegrasyon ve ajanda modeli
+
+LawCopilot VNext ürün yönünde entegrasyonlar ayrı ürün modülü değil, `Ayarlar` ekranının parçasıdır.
+
+Bağlı kaynaklar:
+- Codex/OpenClaw hesap bağlantısı
+- Google Gmail
+- Google Takvim
+- Telegram
+
+Ürün yüzeyi:
+- `Asistan` günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonları gösterir
+- `Taslaklar` kanal bağımsız dış iletişim ve çalışma çıktısı merkezidir
+- ayrı `E-posta Taslakları` ve `Sosyal Medya` ana navigasyondan kaldırılmıştır
+
+Yerel mirror tabloları:
+- `connected_accounts`
+- `email_threads`
+- `calendar_events`
+- `assistant_actions`
+- `outbound_drafts`
+- `approval_events`
+
+Karar akışı:
+1. çalışma alanı ve dosya verisi
+2. görev, risk notu ve taslaklar
+3. Gmail thread mirror
+4. Google Takvim mirror
+5. Telegram sinyalleri
+6. Codex/OpenClaw runtime ile özetleme ve aksiyon önerisi
+
+Güvenlik kuralı:
+- tüm dış iletişimler `taslak + onay` akışıyla yürür
+- gönderim, kullanıcı onayı olmadan otomatikleşmez
 
 ## Çalışma alanı modeli
 

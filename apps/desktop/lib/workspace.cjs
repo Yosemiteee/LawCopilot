@@ -4,9 +4,12 @@ const os = require("os");
 const path = require("path");
 const { shell } = require("electron");
 
-const WINDOWS_SYSTEM_ROOTS = new Set(["windows", "program files", "program files (x86)", "programdata", "users"]);
-const MAC_SYSTEM_ROOTS = new Set(["applications", "library", "system", "users"]);
-const LINUX_SYSTEM_ROOTS = new Set(["bin", "boot", "dev", "etc", "lib", "lib64", "opt", "proc", "root", "run", "sbin", "srv", "sys", "usr", "var", "home"]);
+const WINDOWS_SYSTEM_ROOTS = new Set(["windows", "program files", "program files (x86)", "programdata"]);
+const WINDOWS_SHALLOW_ROOTS = new Set(["users"]);
+const MAC_SYSTEM_ROOTS = new Set(["applications", "library", "system"]);
+const MAC_SHALLOW_ROOTS = new Set(["users"]);
+const LINUX_SYSTEM_ROOTS = new Set(["bin", "boot", "dev", "etc", "lib", "lib64", "opt", "proc", "root", "run", "sbin", "srv", "sys"]);
+const LINUX_SHALLOW_ROOTS = new Set(["home", "usr", "var"]);
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -37,7 +40,12 @@ function validateWorkspaceRoot(rawPath) {
       throw new Error("Disk kökleri çalışma klasörü olarak seçilemez.");
     }
     const parts = resolved.split(/[\\/]+/).filter(Boolean);
-    if (parts[0] && WINDOWS_SYSTEM_ROOTS.has(parts[0].toLowerCase())) {
+    const first = parts[0] ? parts[0].toLowerCase() : "";
+    if (first && WINDOWS_SYSTEM_ROOTS.has(first)) {
+      throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
+    }
+    // Allow Users/username/subfolder (depth >= 3 parts)
+    if (first && WINDOWS_SHALLOW_ROOTS.has(first) && parts.length < 3) {
       throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
     }
     if (resolved.startsWith("\\\\")) {
@@ -48,7 +56,12 @@ function validateWorkspaceRoot(rawPath) {
       throw new Error("Disk kökleri çalışma klasörü olarak seçilemez.");
     }
     const parts = resolved.split("/").filter(Boolean);
-    if (parts[0] && MAC_SYSTEM_ROOTS.has(parts[0].toLowerCase())) {
+    const first = parts[0] ? parts[0].toLowerCase() : "";
+    if (first && MAC_SYSTEM_ROOTS.has(first)) {
+      throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
+    }
+    // Allow /Users/username/subfolder (depth >= 3 parts)
+    if (first && MAC_SHALLOW_ROOTS.has(first) && parts.length < 3) {
       throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
     }
   } else {
@@ -56,7 +69,13 @@ function validateWorkspaceRoot(rawPath) {
       throw new Error("Disk kökleri çalışma klasörü olarak seçilemez.");
     }
     const parts = resolved.split("/").filter(Boolean);
-    if (parts[0] && LINUX_SYSTEM_ROOTS.has(parts[0].toLowerCase())) {
+    const first = parts[0] ? parts[0].toLowerCase() : "";
+    if (first && LINUX_SYSTEM_ROOTS.has(first)) {
+      throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
+    }
+    // /home → blocked, /home/sami → blocked (user home, caught above)
+    // /home/sami/Documents → allowed (3+ parts)
+    if (first && LINUX_SHALLOW_ROOTS.has(first) && parts.length < 3) {
       throw new Error("Sistem klasörleri çalışma klasörü olarak seçilemez.");
     }
   }

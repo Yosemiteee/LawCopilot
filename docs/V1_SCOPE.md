@@ -33,6 +33,8 @@ It is not:
 - risk/issues working notes
 - missing-information prompts
 - explainable task recommendations
+- daily agenda fed by matter, Gmail, calendar, and Telegram signals
+- suggested actions with explicit human approval
 - client update draft generation
 - internal summary / first case assessment / meeting summary / question list draft generation
 
@@ -45,6 +47,7 @@ It is not:
 
 ### Draft-first communication
 - Email/client-update drafts
+- unified outbound draft center
 - review states
 - approval states
 - clear separation between draft and sent state
@@ -55,6 +58,7 @@ It is not:
 - Model profile selection
 - Storage path visibility
 - Connector enable/disable controls
+- Google Gmail / Calendar and Telegram integration setup
 - Safety mode visibility
 
 ### Security and governance baseline
@@ -68,6 +72,7 @@ It is not:
 ## V1.5 Later
 
 - Social monitoring features
+- separate email and social management modules in main navigation
 - Explainable assignment recommendation
 - desktop cross-platform expansion beyond Windows-first
 - richer analytics and dashboarding

@@ -49,10 +49,11 @@ Beklenen çıktılar:
 2. Kullanıcı doğrudan başlangıç ekranına düşer
 3. Çalışma klasörü seçilmeden ana çalışma yüzeyleri açılmaz
 4. Kullanıcı çalışma klasörü seçer
-5. Kullanıcı isterse sağlayıcı kurulumunu ve Telegram bot doğrulamasını yapar
+5. Kullanıcı isterse sağlayıcı kurulumunu, Google Gmail/Takvim bağlantısını ve Telegram bot doğrulamasını yapar
 6. Disk kökü, kullanıcı klasörünün tamamı veya sistem klasörü seçilirse işlem reddedilir
 7. İlk tarama başlatılır
 8. Kullanıcı doğrudan çalışma alanı ekranına geçer
+9. `Asistan` ekranı günlük ajanda, önerilen aksiyonlar ve taslak + onay akışı ile açılır
 
 ## Platform farkları
 ### Windows
@@ -103,4 +104,5 @@ CI ve paket raporları:
 - canlı dosya izleme yoktur
 - OCR yoktur
 - benzerlik motoru yerel sinyal tabanlıdır
-- tarayıcı onaylı Codex veya ChatGPT hesap girişi gömülü değildir
+- OpenAI hesabı için tarayıcı tabanlı Codex oturumu masaüstü arayüzünden başlatılabilir
+- Gmail ve Takvim bağlantıları masaüstü OAuth ile kurulur; ayrı e-posta veya sosyal medya modülü yerine Asistan ajandasına yansır

@@ -36,7 +36,18 @@ class Settings:
     provider_type: str = ""
     provider_base_url: str = ""
     provider_model: str = ""
+    provider_api_key: str = ""
     provider_configured: bool = False
+    openclaw_state_dir: str = ""
+    openclaw_image: str = "openclaw-local:chromium"
+    openclaw_timeout_seconds: int = 75
+    google_enabled: bool = False
+    google_configured: bool = False
+    google_account_label: str = ""
+    google_scopes: tuple[str, ...] = ()
+    gmail_connected: bool = False
+    calendar_connected: bool = False
+    drive_connected: bool = False
     telegram_enabled: bool = False
     telegram_configured: bool = False
     telegram_bot_username: str = ""
@@ -94,7 +105,22 @@ def get_settings() -> Settings:
         provider_type=os.getenv("LAWCOPILOT_PROVIDER_TYPE", ""),
         provider_base_url=os.getenv("LAWCOPILOT_PROVIDER_BASE_URL", ""),
         provider_model=os.getenv("LAWCOPILOT_PROVIDER_MODEL", ""),
+        provider_api_key=os.getenv("LAWCOPILOT_PROVIDER_API_KEY", ""),
         provider_configured=os.getenv("LAWCOPILOT_PROVIDER_CONFIGURED", "false").lower() == "true",
+        openclaw_state_dir=os.getenv("LAWCOPILOT_OPENCLAW_STATE_DIR", ""),
+        openclaw_image=os.getenv("LAWCOPILOT_OPENCLAW_IMAGE", "openclaw-local:chromium"),
+        openclaw_timeout_seconds=int(os.getenv("LAWCOPILOT_OPENCLAW_TIMEOUT", "75")),
+        google_enabled=os.getenv("LAWCOPILOT_GOOGLE_ENABLED", "false").lower() == "true",
+        google_configured=os.getenv("LAWCOPILOT_GOOGLE_CONFIGURED", "false").lower() == "true",
+        google_account_label=os.getenv("LAWCOPILOT_GOOGLE_ACCOUNT_LABEL", ""),
+        google_scopes=tuple(
+            scope.strip()
+            for scope in os.getenv("LAWCOPILOT_GOOGLE_SCOPES", "").split(",")
+            if scope.strip()
+        ),
+        gmail_connected=os.getenv("LAWCOPILOT_GMAIL_CONNECTED", "false").lower() == "true",
+        calendar_connected=os.getenv("LAWCOPILOT_CALENDAR_CONNECTED", "false").lower() == "true",
+        drive_connected=os.getenv("LAWCOPILOT_DRIVE_CONNECTED", "false").lower() == "true",
         telegram_enabled=os.getenv("LAWCOPILOT_TELEGRAM_ENABLED", "false").lower() == "true",
         telegram_configured=os.getenv("LAWCOPILOT_TELEGRAM_CONFIGURED", "false").lower() == "true",
         telegram_bot_username=os.getenv("LAWCOPILOT_TELEGRAM_BOT_USERNAME", ""),
