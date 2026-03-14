@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
+const DEFAULT_BACKEND_BOOT_TIMEOUT_MS = Number(process.env.LAWCOPILOT_BACKEND_BOOT_TIMEOUT_MS || 60000);
+
 function normalizeGoogleScopes(scopes) {
   const defaults = [
     "openid",
@@ -98,9 +100,13 @@ function backendEnv(config, runtimePaths) {
     LAWCOPILOT_PROVIDER_MODEL: provider.model || "",
     LAWCOPILOT_PROVIDER_API_KEY: provider.apiKey || "",
     LAWCOPILOT_PROVIDER_CONFIGURED: providerConfigured ? "true" : "false",
-    LAWCOPILOT_OPENCLAW_STATE_DIR: openclawEnabled ? path.join(storageRoot, "openclaw-state") : "",
-    LAWCOPILOT_OPENCLAW_IMAGE: openclawEnabled ? (process.env.LAWCOPILOT_OPENCLAW_IMAGE || "openclaw-local:chromium") : "",
-    LAWCOPILOT_OPENCLAW_TIMEOUT: openclawEnabled ? (process.env.LAWCOPILOT_OPENCLAW_TIMEOUT || "75") : "",
+    ...(openclawEnabled
+      ? {
+          LAWCOPILOT_OPENCLAW_STATE_DIR: path.join(storageRoot, "openclaw-state"),
+          LAWCOPILOT_OPENCLAW_IMAGE: process.env.LAWCOPILOT_OPENCLAW_IMAGE || "openclaw-local:chromium",
+          LAWCOPILOT_OPENCLAW_TIMEOUT: process.env.LAWCOPILOT_OPENCLAW_TIMEOUT || "75",
+        }
+      : {}),
     LAWCOPILOT_GOOGLE_ENABLED: google.enabled ? "true" : "false",
     LAWCOPILOT_GOOGLE_CONFIGURED: google.oauthConnected && google.accessToken ? "true" : "false",
     LAWCOPILOT_GOOGLE_ACCOUNT_LABEL: google.accountLabel || "",
@@ -165,7 +171,7 @@ function startBackend(config, runtimePaths) {
   return { child, outFile };
 }
 
-async function waitForBackend(apiBaseUrl, timeoutMs = 15000) {
+async function waitForBackend(apiBaseUrl, timeoutMs = DEFAULT_BACKEND_BOOT_TIMEOUT_MS) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {

@@ -6,6 +6,8 @@ const path = require("path");
 const { defaultDesktopConfig, loadDesktopConfig, resolveRuntimePaths, saveDesktopConfig } = require("../lib/config.cjs");
 const { startBackend, stopBackend, waitForBackend } = require("../lib/backend.cjs");
 
+let backendLogPath = "";
+
 async function main() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lawcopilot-desktop-"));
   const storagePath = path.join(tempRoot, "artifacts");
@@ -35,8 +37,9 @@ async function main() {
   assert.equal(loaded.officeId, "pilot-office");
 
   const handle = startBackend(loaded, runtimePaths);
+  backendLogPath = handle.outFile || "";
   try {
-    const health = await waitForBackend(loaded.apiBaseUrl, 15000);
+    const health = await waitForBackend(loaded.apiBaseUrl);
     assert.equal(health.ok, true);
     assert.equal(health.office_id, "pilot-office");
     const telemetry = await fetch(`${loaded.apiBaseUrl}/telemetry/health`, {
@@ -65,5 +68,14 @@ async function createLawyerToken(apiBaseUrl) {
 
 main().catch((error) => {
   console.error(error);
+  if (error?.message === "backend_boot_timeout") {
+    try {
+      if (backendLogPath && fs.existsSync(backendLogPath)) {
+        const lines = fs.readFileSync(backendLogPath, "utf-8").trim().split(/\r?\n/).slice(-80);
+        console.error("--- backend log tail ---");
+        console.error(lines.join("\n"));
+      }
+    } catch {}
+  }
   process.exitCode = 1;
 });

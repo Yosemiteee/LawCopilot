@@ -280,7 +280,7 @@ async function ensureBackendRunning(options = {}) {
   if (!health && (!backendHandle || childExited || options.forceRestart)) {
     backendHandle = startBackend(config, runtimePaths);
     attachBackendExitWatcher(backendHandle);
-    health = await waitForBackend(config.apiBaseUrl, 15000);
+    health = await waitForBackend(config.apiBaseUrl);
   }
   if (!health) {
     throw new Error("backend_unreachable");
