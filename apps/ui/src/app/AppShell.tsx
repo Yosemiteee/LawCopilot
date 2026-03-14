@@ -21,6 +21,7 @@ export function AppShell() {
   const mainScrollTimerRef = useRef<number | null>(null);
   const isAssistantRoute = location.pathname === "/assistant";
   const isSettingsRoute = location.pathname === "/settings";
+  const isOnboardingRoute = location.pathname === "/onboarding";
   const toolsOpen = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return location.pathname === "/assistant" && Boolean(params.get("tool"));
@@ -116,13 +117,13 @@ export function AppShell() {
             </SectionCard>
           ) : (
             <>
-              {connectionState === "ready" && !settings.workspaceConfigured && location.pathname !== "/settings" ? (
+              {connectionState === "ready" && !settings.workspaceConfigured && !isSettingsRoute && !isOnboardingRoute ? (
                 <div className="shell-banner">
                   <div>
                     <strong>{sozluk.shell.setupBannerTitle}</strong>
                     <p>{sozluk.shell.setupBannerDescription}</p>
                   </div>
-                  <button className="button" type="button" onClick={() => navigate("/settings")}>
+                  <button className="button" type="button" onClick={() => navigate("/onboarding")}>
                     {sozluk.shell.setupBannerAction}
                   </button>
                 </div>

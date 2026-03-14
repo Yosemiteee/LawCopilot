@@ -10,6 +10,14 @@ async function parseJson(response) {
   }
 }
 
+function base64UrlEncode(value) {
+  return Buffer.from(String(value || ""), "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
 function googleError(payload, fallback) {
   return String(payload?.error_description || payload?.error?.message || payload?.error || fallback);
 }
@@ -212,6 +220,57 @@ async function syncGoogleData(config, runtimeInfo) {
   };
 }
 
+function buildMimeMessage(payload = {}) {
+  const lines = [
+    `To: ${String(payload.to || "").trim()}`,
+    `Subject: ${String(payload.subject || "").trim()}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "",
+    String(payload.body || "").trim(),
+  ];
+  return base64UrlEncode(lines.join("\r\n"));
+}
+
+async function sendGmailMessage(config, payload = {}) {
+  const google = config?.google || {};
+  if (!google.oauthConnected) {
+    throw new Error("Google hesabı bağlı değil.");
+  }
+  const refreshed = await refreshAccessToken(config);
+  const accessToken = refreshed.accessToken;
+  if (!accessToken) {
+    throw new Error("Google erişim anahtarı bulunamadı.");
+  }
+  const to = String(payload.to || "").trim();
+  const subject = String(payload.subject || "").trim();
+  const body = String(payload.body || "").trim();
+  if (!to || !subject || !body) {
+    throw new Error("Gmail gönderimi için alıcı, konu ve gövde gerekli.");
+  }
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      raw: buildMimeMessage({ to, subject, body }),
+      threadId: payload.threadId ? String(payload.threadId) : undefined,
+    }),
+  });
+  const result = await parseJson(response);
+  if (!response.ok || !result?.id) {
+    throw new Error(googleError(result, "Gmail iletisi gönderilemedi."));
+  }
+  return {
+    ok: true,
+    message: "Gmail iletisi gönderildi.",
+    externalMessageId: String(result.id),
+    externalThreadId: String(result.threadId || ""),
+    patch: refreshed.patch,
+  };
+}
+
 function hasCalendarWriteScope(scopes) {
   return Array.isArray(scopes) && scopes.some((scope) => GOOGLE_CALENDAR_WRITE_SCOPES.includes(String(scope || "").trim()));
 }
@@ -301,5 +360,6 @@ async function createGoogleCalendarEvent(config, runtimeInfo, payload) {
 
 module.exports = {
   createGoogleCalendarEvent,
+  sendGmailMessage,
   syncGoogleData,
 };

@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { waitForLoopbackCallback } = require("./oauth-loopback.cjs");
 
 let currentSession = null;
 const DEFAULT_GOOGLE_SCOPES = [
@@ -47,9 +48,10 @@ function appendLog(config, text) {
 }
 
 function resolveCredentials(config) {
-  const clientId = process.env.LAWCOPILOT_GOOGLE_CLIENT_ID || "";
-  const clientSecret = process.env.LAWCOPILOT_GOOGLE_CLIENT_SECRET || "";
-  const redirectUri = process.env.LAWCOPILOT_GOOGLE_REDIRECT_URI || "http://127.0.0.1:1456/google/auth/callback";
+  const google = config?.google || {};
+  const clientId = String(google.clientId || process.env.LAWCOPILOT_GOOGLE_CLIENT_ID || "").trim();
+  const clientSecret = String(google.clientSecret || process.env.LAWCOPILOT_GOOGLE_CLIENT_SECRET || "").trim();
+  const redirectUri = String(google.redirectUri || process.env.LAWCOPILOT_GOOGLE_REDIRECT_URI || "http://127.0.0.1:1456/google/auth/callback").trim();
   return {
     clientId,
     clientSecret,
@@ -61,6 +63,50 @@ function resolveCredentials(config) {
 function getGoogleAuthStatus(config) {
   const google = config?.google || {};
   const credentials = resolveCredentials(config);
+  if (currentSession?.status === "waiting") {
+    return {
+      provider: "google",
+      authStatus: "bekliyor",
+      configured: false,
+      accountLabel: google.accountLabel || "",
+      scopes: Array.isArray(google.scopes) ? google.scopes : credentials.scopes,
+      clientReady: Boolean(credentials.clientId && credentials.clientSecret),
+      redirectUri: credentials.redirectUri,
+      authUrl: currentSession.authUrl || "",
+      browserTarget: currentSession.browserTarget || "",
+      message: "Google giriş ekranı açıldı. Tarayıcıda izinleri tamamlayın; LawCopilot bağlantıyı otomatik algılar.",
+      error: "",
+      logFile: logFilePath(config),
+    };
+  }
+  if (currentSession?.status === "error") {
+    return {
+      provider: "google",
+      authStatus: "hata",
+      configured: false,
+      accountLabel: google.accountLabel || "",
+      scopes: Array.isArray(google.scopes) ? google.scopes : credentials.scopes,
+      clientReady: Boolean(credentials.clientId && credentials.clientSecret),
+      redirectUri: credentials.redirectUri,
+      authUrl: currentSession.authUrl || "",
+      browserTarget: currentSession.browserTarget || "",
+      message: currentSession.error || "Google bağlantısı tamamlanamadı.",
+      error: currentSession.error || "",
+      logFile: logFilePath(config),
+    };
+  }
+  if (currentSession?.status === "complete" && currentSession.completedStatus) {
+    return {
+      provider: "google",
+      ...currentSession.completedStatus,
+      authStatus: "bagli",
+      authUrl: currentSession.authUrl || "",
+      browserTarget: currentSession.browserTarget || "",
+      clientReady: Boolean(credentials.clientId && credentials.clientSecret),
+      redirectUri: credentials.redirectUri,
+      logFile: logFilePath(config),
+    };
+  }
   return {
     provider: "google",
     authStatus: google.oauthConnected ? "bagli" : "hazir_degil",
@@ -80,38 +126,7 @@ function getGoogleAuthStatus(config) {
   };
 }
 
-async function startGoogleOAuth(config, openUrl) {
-  const credentials = resolveCredentials(config);
-  if (!credentials.clientId || !credentials.clientSecret) {
-    throw new Error("Google OAuth istemcisi tanımlı değil. LAWCOPILOT_GOOGLE_CLIENT_ID ve LAWCOPILOT_GOOGLE_CLIENT_SECRET gerekir.");
-  }
-  const state = crypto.randomBytes(16).toString("hex");
-  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  authUrl.searchParams.set("client_id", credentials.clientId);
-  authUrl.searchParams.set("redirect_uri", credentials.redirectUri);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", credentials.scopes.join(" "));
-  authUrl.searchParams.set("access_type", "offline");
-  authUrl.searchParams.set("include_granted_scopes", "true");
-  authUrl.searchParams.set("prompt", "consent");
-  authUrl.searchParams.set("state", state);
-  currentSession = {
-    state,
-    authUrl: authUrl.toString(),
-    createdAt: Date.now(),
-  };
-  const browserTarget = await openUrl(authUrl.toString());
-  appendLog(config, `[${nowIso()}] google_oauth_start ${browserTarget}\n`);
-  return {
-    ...getGoogleAuthStatus(config),
-    authStatus: "bekleniyor",
-    authUrl: authUrl.toString(),
-    browserTarget,
-    message: "Google oturum akışı tarayıcıda açıldı.",
-  };
-}
-
-async function submitGoogleOAuthCallback(config, callbackUrl) {
+async function exchangeGoogleCallback(config, callbackUrl) {
   if (!currentSession) {
     throw new Error("Google OAuth oturumu başlatılmadı.");
   }
@@ -145,7 +160,6 @@ async function submitGoogleOAuthCallback(config, callbackUrl) {
     headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
   });
   const userInfo = await userInfoResponse.json().catch(() => ({}));
-  currentSession = null;
   appendLog(config, `[${nowIso()}] google_oauth_complete ${String(userInfo.email || "")}\n`);
   return {
     configured: true,
@@ -161,6 +175,93 @@ async function submitGoogleOAuthCallback(config, callbackUrl) {
   };
 }
 
+async function startGoogleOAuth(config, openUrl) {
+  const credentials = resolveCredentials(config);
+  if (!credentials.clientId || !credentials.clientSecret) {
+    throw new Error("Google OAuth istemcisi tanımlı değil. LAWCOPILOT_GOOGLE_CLIENT_ID ve LAWCOPILOT_GOOGLE_CLIENT_SECRET gerekir.");
+  }
+  if (currentSession?.status === "waiting") {
+    return getGoogleAuthStatus(config);
+  }
+  const state = crypto.randomBytes(16).toString("hex");
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", credentials.clientId);
+  authUrl.searchParams.set("redirect_uri", credentials.redirectUri);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", credentials.scopes.join(" "));
+  authUrl.searchParams.set("access_type", "offline");
+  authUrl.searchParams.set("include_granted_scopes", "true");
+  authUrl.searchParams.set("prompt", "consent");
+  authUrl.searchParams.set("state", state);
+  currentSession = {
+    state,
+    authUrl: authUrl.toString(),
+    createdAt: Date.now(),
+    status: "waiting",
+    completedStatus: null,
+    error: "",
+    browserTarget: "",
+  };
+  let browserTarget = "";
+  try {
+    browserTarget = await openUrl(authUrl.toString());
+  } catch (error) {
+    currentSession = null;
+    throw error;
+  }
+  currentSession.browserTarget = browserTarget;
+  appendLog(config, `[${nowIso()}] google_oauth_start ${browserTarget}\n`);
+  currentSession.completionPromise = waitForLoopbackCallback(credentials.redirectUri, {
+    timeoutMs: 180_000,
+    successMessage: "Google bağlantısı tamamlandı. LawCopilot uygulamasına dönebilirsiniz.",
+    errorMessage: "Google bağlantısı tamamlanamadı. LawCopilot uygulamasına dönüp tekrar deneyin.",
+  })
+    .then((callbackUrl) => exchangeGoogleCallback(config, callbackUrl))
+    .then((status) => {
+      if (currentSession?.state === state) {
+        currentSession.status = "complete";
+        currentSession.completedStatus = status;
+        currentSession.error = "";
+      }
+      return status;
+    })
+    .catch((error) => {
+      if (currentSession?.state === state) {
+        currentSession.status = "error";
+        currentSession.error = error instanceof Error ? error.message : "Google bağlantısı tamamlanamadı.";
+      }
+      return null;
+    });
+  return getGoogleAuthStatus(config);
+}
+
+async function submitGoogleOAuthCallback(config, callbackUrl) {
+  const status = await exchangeGoogleCallback(config, callbackUrl);
+  if (currentSession) {
+    currentSession.status = "complete";
+    currentSession.completedStatus = status;
+    currentSession.error = "";
+  }
+  return status;
+}
+
+function consumeCompletedGoogleOAuth() {
+  if (!currentSession) {
+    return null;
+  }
+  if (currentSession.status === "complete" && currentSession.completedStatus) {
+    const completed = currentSession.completedStatus;
+    currentSession = null;
+    return { status: completed };
+  }
+  if (currentSession.status === "error") {
+    const error = currentSession.error || "Google bağlantısı tamamlanamadı.";
+    currentSession = null;
+    return { error };
+  }
+  return null;
+}
+
 function cancelGoogleOAuth(config) {
   currentSession = null;
   appendLog(config, `[${nowIso()}] google_oauth_cancelled\n`);
@@ -173,6 +274,7 @@ function cancelGoogleOAuth(config) {
 
 module.exports = {
   cancelGoogleOAuth,
+  consumeCompletedGoogleOAuth,
   getGoogleAuthStatus,
   startGoogleOAuth,
   submitGoogleOAuthCallback,

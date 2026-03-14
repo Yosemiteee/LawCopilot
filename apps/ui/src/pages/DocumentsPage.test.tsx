@@ -9,7 +9,8 @@ afterEach(() => {
 });
 
 describe("DocumentsPage", () => {
-  it("opens similar workspace document in viewer", async () => {
+  it("opens similar workspace document in the system app", async () => {
+    const openPathInOS = vi.fn().mockResolvedValue({ ok: true });
     installFetchMock({
       "GET /health": {
         ok: true,
@@ -145,7 +146,8 @@ describe("DocumentsPage", () => {
     });
 
     renderApp(["/_embedded/documents"], {
-      storedSettings: { workspaceConfigured: true, workspaceRootName: "Deneme Belgeleri" }
+      storedSettings: { workspaceConfigured: true, workspaceRootName: "Deneme Belgeleri" },
+      desktop: { openPathInOS },
     });
 
     await waitFor(() => expect(screen.getByText("Kira İhtarı")).toBeInTheDocument());
@@ -155,7 +157,6 @@ describe("DocumentsPage", () => {
     expect(screen.getByText("Taslak önerileri")).toBeInTheDocument();
     expect(screen.getByText(/Klasör bağlamı:/)).toBeInTheDocument();
     fireEvent.click(screen.getAllByText("Belgeyi aç")[1]);
-    await waitFor(() => expect(screen.getAllByText("Belge görüntüleyici").length).toBeGreaterThan(0));
-    expect(screen.getByText("Tahliye davası emsali")).toBeInTheDocument();
+    await waitFor(() => expect(openPathInOS).toHaveBeenCalledWith("emsal/tahliye_davasi.txt"));
   });
 });

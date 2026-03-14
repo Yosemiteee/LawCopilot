@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAppContext } from "../../app/AppContext";
 import { buildDocumentViewerPath } from "../../lib/documentViewer";
+import { openWorkspaceDocument } from "../../lib/workspaceDocuments";
 import { belgeDurumuEtiketi, kisaDosyaBoyutu, kaynakTipiEtiketi } from "../../lib/labels";
 import { listMatterDocuments, listMatterIngestionJobs, listMatterWorkspaceDocuments, uploadMatterDocument } from "../../services/lawcopilotApi";
 import type { IngestionJob, MatterDocument, MatterWorkspaceDocumentLink } from "../../types/domain";
@@ -129,13 +130,15 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
                     <button
                       className="button button--ghost"
                       onClick={() =>
-                        navigate(
-                          buildDocumentViewerPath({
+                        void openWorkspaceDocument({
+                          relativePath: link.relative_path,
+                          fallbackTarget: {
                             scope: "workspace",
                             documentId: link.workspace_document_id,
                             matterId,
-                          }),
-                        )
+                          },
+                          navigate,
+                        })
                       }
                       type="button"
                     >
@@ -179,7 +182,7 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
                       }
                       type="button"
                     >
-                      Belgeyi aç
+                      Belgeyi incele
                     </button>
                   </div>
                 </div>

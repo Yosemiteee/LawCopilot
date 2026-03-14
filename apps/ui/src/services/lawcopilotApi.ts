@@ -20,6 +20,7 @@ import type {
   MatterWorkspaceDocumentLink,
   ModelProfilesResponse,
   QueryJob,
+  GoogleDriveFile,
   RiskNotesResponse,
   SearchResponse,
   SimilarDocumentsResponse,
@@ -33,9 +34,11 @@ import type {
   AssistantRuntimeProfile,
   AssistantRuntimeWorkspaceStatus,
   AssistantApproval,
+  AssistantOnboardingState,
   AssistantToolStatus,
   TelemetryHealth,
   TelegramIntegrationStatus,
+  WhatsAppIntegrationStatus,
   TaskRecommendationsResponse,
   TimelineEvent,
   OutboundDraft,
@@ -45,7 +48,8 @@ import type {
   WorkspaceOverviewResponse,
   WorkspaceRoot,
   WorkspaceScanJob,
-  WorkspaceSearchResponse
+  WorkspaceSearchResponse,
+  XIntegrationStatus
 } from "../types/domain";
 import { apiRequest } from "./apiClient";
 
@@ -65,6 +69,7 @@ export function saveUserProfile(
   settings: AppSettings,
   payload: {
     display_name?: string;
+    favorite_color?: string;
     food_preferences?: string;
     transport_preference?: string;
     weather_preference?: string;
@@ -72,6 +77,14 @@ export function saveUserProfile(
     communication_style?: string;
     assistant_notes?: string;
     important_dates?: Array<{ label: string; date: string; recurring_annually: boolean; notes?: string }>;
+    related_profiles?: Array<{
+      id?: string;
+      name: string;
+      relationship?: string;
+      preferences?: string;
+      notes?: string;
+      important_dates?: Array<{ label: string; date: string; recurring_annually: boolean; notes?: string }>;
+    }>;
   }
 ) {
   return apiRequest<{ profile: UserProfile; message: string }>(settings, "/profile", {
@@ -108,6 +121,10 @@ export function saveAssistantRuntimeProfile(
 
 export function getAssistantRuntimeWorkspace(settings: AppSettings) {
   return apiRequest<AssistantRuntimeWorkspaceStatus>(settings, "/assistant/runtime/workspace");
+}
+
+export function getAssistantOnboardingState(settings: AppSettings) {
+  return apiRequest<AssistantOnboardingState>(settings, "/assistant/onboarding/state");
 }
 
 export function getTelemetryHealth(settings: AppSettings) {
@@ -491,7 +508,7 @@ export function listAssistantDrafts(settings: AppSettings) {
 }
 
 export function sendAssistantDraft(settings: AppSettings, draftId: number, note?: string) {
-  return apiRequest<{ draft: OutboundDraft; message: string; dispatch_mode: string }>(settings, `/assistant/drafts/${draftId}/send`, {
+  return apiRequest<{ draft: OutboundDraft; action?: SuggestedAction | null; message: string; dispatch_mode: string }>(settings, `/assistant/drafts/${draftId}/send`, {
     method: "POST",
     body: JSON.stringify({ note })
   });
@@ -501,8 +518,23 @@ export function getGoogleIntegrationStatus(settings: AppSettings) {
   return apiRequest<GoogleIntegrationStatus>(settings, "/integrations/google/status");
 }
 
+export function listGoogleDriveFiles(settings: AppSettings, limit = 30) {
+  return apiRequest<{ configured: boolean; connected: boolean; items: GoogleDriveFile[]; generated_from: string }>(
+    settings,
+    `/integrations/google/drive-files?limit=${Math.max(1, Math.min(limit, 100))}`
+  );
+}
+
 export function getTelegramIntegrationStatus(settings: AppSettings) {
   return apiRequest<TelegramIntegrationStatus>(settings, "/integrations/telegram/status");
+}
+
+export function getWhatsAppIntegrationStatus(settings: AppSettings) {
+  return apiRequest<WhatsAppIntegrationStatus>(settings, "/integrations/whatsapp/status");
+}
+
+export function getXIntegrationStatus(settings: AppSettings) {
+  return apiRequest<XIntegrationStatus>(settings, "/integrations/x/status");
 }
 
 // ── Matter Update & Notes ──────────────────────────────────────

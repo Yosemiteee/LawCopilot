@@ -73,6 +73,8 @@ function backendEnv(config, runtimePaths) {
   const provider = config.provider || {};
   const google = config.google || {};
   const telegram = config.telegram || {};
+  const whatsapp = config.whatsapp || {};
+  const x = config.x || {};
   const googleScopes = normalizeGoogleScopes(google.scopes);
   const providerConfigured = Boolean(provider.apiKey || provider.oauthConnected || provider.type === "ollama");
   const openclawEnabled = provider.type === "openai-codex";
@@ -90,6 +92,7 @@ function backendEnv(config, runtimePaths) {
     LAWCOPILOT_AUDIT_LOG: path.join(storageRoot, "audit.log.jsonl"),
     LAWCOPILOT_STRUCTURED_LOG: path.join(storageRoot, "events.log.jsonl"),
     LAWCOPILOT_DB_PATH: path.join(storageRoot, "lawcopilot.db"),
+    LAWCOPILOT_CONNECTOR_DRY_RUN: "false",
     LAWCOPILOT_PROVIDER_TYPE: provider.type || "",
     LAWCOPILOT_PROVIDER_BASE_URL: provider.baseUrl || "",
     LAWCOPILOT_PROVIDER_MODEL: provider.model || "",
@@ -110,6 +113,16 @@ function backendEnv(config, runtimePaths) {
     LAWCOPILOT_TELEGRAM_BOT_USERNAME: telegram.botUsername || "",
     LAWCOPILOT_TELEGRAM_ALLOWED_USER_ID: telegram.allowedUserId || "",
     LAWCOPILOT_TELEGRAM_CONFIGURED: telegram.botToken && telegram.allowedUserId ? "true" : "false",
+    LAWCOPILOT_WHATSAPP_ENABLED: whatsapp.enabled ? "true" : "false",
+    LAWCOPILOT_WHATSAPP_CONFIGURED: whatsapp.enabled && whatsapp.accessToken && whatsapp.phoneNumberId ? "true" : "false",
+    LAWCOPILOT_WHATSAPP_ACCOUNT_LABEL: whatsapp.businessLabel || whatsapp.verifiedName || whatsapp.displayPhoneNumber || "",
+    LAWCOPILOT_WHATSAPP_PHONE_NUMBER_ID: whatsapp.phoneNumberId || "",
+    LAWCOPILOT_WHATSAPP_DISPLAY_PHONE_NUMBER: whatsapp.displayPhoneNumber || "",
+    LAWCOPILOT_X_ENABLED: x.enabled ? "true" : "false",
+    LAWCOPILOT_X_CONFIGURED: x.enabled && x.oauthConnected && x.accessToken ? "true" : "false",
+    LAWCOPILOT_X_ACCOUNT_LABEL: x.accountLabel || "",
+    LAWCOPILOT_X_USER_ID: x.userId || "",
+    LAWCOPILOT_X_SCOPES: Array.isArray(x.scopes) ? x.scopes.join(",") : "",
   };
 }
 

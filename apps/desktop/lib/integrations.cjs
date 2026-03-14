@@ -11,6 +11,13 @@ function providerDefaults(type) {
       model: "openai-codex/gpt-5.3-codex",
     };
   }
+  if (type === "gemini") {
+    return {
+      type: "gemini",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      model: "gemini-2.5-flash",
+    };
+  }
   if (type === "ollama") {
     return {
       type: "ollama",
@@ -91,6 +98,18 @@ async function validateProviderConfig(input) {
     }
     availableModels = Array.isArray(payload.models) ? payload.models.map((item) => item.name).filter(Boolean) : [];
     providerName = "ollama";
+  } else if (type === "gemini") {
+    const response = await fetch(`${baseUrl}/models?key=${encodeURIComponent(apiKey)}`);
+    const payload = await parseJson(response);
+    if (!response.ok) {
+      throw new Error(responseErrorMessage(payload, "Gemini doğrulaması başarısız oldu."));
+    }
+    availableModels = Array.isArray(payload.models)
+      ? payload.models
+        .map((item) => String(item?.name || "").replace(/^models\//, ""))
+        .filter(Boolean)
+      : [];
+    providerName = "gemini";
   } else {
     const response = await fetch(`${baseUrl}/models`, {
       headers: {

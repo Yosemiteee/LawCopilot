@@ -83,6 +83,15 @@ async function main() {
     assert.equal(ollamaCheck.ok, true);
     assert.ok(ollamaCheck.provider.availableModels.includes("llama3.1"));
 
+    const geminiCheck = await validateProviderConfig({
+      type: "gemini",
+      baseUrl: `${baseUrl}/v1beta`,
+      model: "gemini-2.5-flash",
+      apiKey: "abc123456789xyz",
+    });
+    assert.equal(geminiCheck.ok, true);
+    assert.ok(geminiCheck.provider.availableModels.includes("gemini-2.5-flash"));
+
     const telegramCheck = await validateTelegramConfig({
       enabled: true,
       botToken: "123456:ABCDEF",
@@ -123,6 +132,12 @@ function createFakeServer() {
     if (req.url === "/api/tags") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ models: [{ name: "llama3.1" }, { name: "qwen2.5" }] }));
+      return;
+    }
+
+    if (req.url === "/v1beta/models?key=abc123456789xyz") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: [{ name: "models/gemini-2.5-flash" }, { name: "models/gemini-2.5-pro" }] }));
       return;
     }
 

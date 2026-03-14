@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { installFetchMock } from "../test/mockFetch";
@@ -107,58 +107,6 @@ describe("WorkspacePage", () => {
     });
 
     await waitFor(() => expect(screen.getAllByText("Çalışma Alanı").length).toBeGreaterThan(0));
-    expect(screen.getByText("Çalışma alanı araması")).toBeInTheDocument();
-    expect(screen.getByText("Çalışma alanı araması")).toBeInTheDocument();
-  });
-
-  it("runs a workspace search from the embedded panel", async () => {
-    installFetchMock({
-      "GET /health": healthPayload,
-      "GET /assistant/home": {
-        today_summary: "Bugün için öncelikli işler hazır.",
-        counts: { agenda: 0, inbox: 0, calendar_today: 0, drafts_pending: 0 },
-        priority_items: [],
-        requires_setup: [],
-        connected_accounts: [],
-        generated_from: "assistant_home_engine",
-      },
-      "GET /assistant/thread": {
-        thread: { id: 1, office_id: "default-office", title: "Asistan", status: "active" },
-        messages: [],
-      },
-      "GET /workspace": workspacePayload,
-      "GET /assistant/agenda": { items: [], generated_from: "test" },
-      "GET /assistant/inbox": { items: [], generated_from: "test" },
-      "POST /workspace/search": {
-        answer: "Kira ihtarına dair dayanak bulundu.",
-        support_level: "yuksek",
-        manual_review_required: false,
-        citation_count: 1,
-        source_coverage: 0.6,
-        generated_from: "workspace_document_memory",
-        citations: [],
-        related_documents: [],
-        attention_points: [],
-        workflow_notes: [],
-        missing_document_signals: [],
-        draft_suggestions: [],
-      },
-    });
-
-    renderApp(["/_embedded/workspace"], {
-      storedSettings: {
-        workspaceConfigured: true,
-        workspaceRootName: "Tahliye Belgeleri",
-      },
-    });
-
-    await waitFor(() => expect(screen.getByText("Çalışma Alanı Araması ve Tarama")).toBeInTheDocument());
-    fireEvent.click(screen.getByText("Çalışma Alanı Araması ve Tarama"));
-    await waitFor(() => expect(screen.getAllByText("Çalışma alanı araması").length).toBeGreaterThan(0));
-    fireEvent.change(screen.getByPlaceholderText("Örneğin: benzer tahliye dosyaları, kira bedeli ihtilafı, fesih bildirimi"), {
-      target: { value: "kira" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Aramayı çalıştır" }));
-    await waitFor(() => expect(screen.getByText("Kira ihtarına dair dayanak bulundu.")).toBeInTheDocument());
+    expect(screen.queryByText("Çalışma alanı araması")).not.toBeInTheDocument();
   });
 });

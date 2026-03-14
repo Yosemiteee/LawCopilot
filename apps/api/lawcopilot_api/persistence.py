@@ -307,6 +307,7 @@ class Persistence:
                 CREATE TABLE IF NOT EXISTS user_profiles (
                     office_id TEXT PRIMARY KEY,
                     display_name TEXT,
+                    favorite_color TEXT,
                     food_preferences TEXT,
                     transport_preference TEXT,
                     weather_preference TEXT,
@@ -314,6 +315,7 @@ class Persistence:
                     communication_style TEXT,
                     assistant_notes TEXT,
                     important_dates_json TEXT NOT NULL DEFAULT '[]',
+                    related_profiles_json TEXT NOT NULL DEFAULT '[]',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE
@@ -391,6 +393,44 @@ class Persistence:
                     UNIQUE (office_id, provider, external_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS whatsapp_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'whatsapp',
+                    conversation_ref TEXT NOT NULL,
+                    message_ref TEXT NOT NULL,
+                    sender TEXT,
+                    recipient TEXT,
+                    body TEXT NOT NULL,
+                    direction TEXT NOT NULL DEFAULT 'inbound',
+                    sent_at TEXT,
+                    reply_needed INTEGER NOT NULL DEFAULT 0,
+                    matter_id INTEGER,
+                    metadata_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    FOREIGN KEY (matter_id) REFERENCES matters(id) ON DELETE SET NULL,
+                    UNIQUE (office_id, provider, message_ref)
+                );
+
+                CREATE TABLE IF NOT EXISTS x_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    office_id TEXT NOT NULL,
+                    provider TEXT NOT NULL DEFAULT 'x',
+                    external_id TEXT NOT NULL,
+                    post_type TEXT NOT NULL DEFAULT 'post',
+                    author_handle TEXT,
+                    content TEXT NOT NULL,
+                    posted_at TEXT,
+                    reply_needed INTEGER NOT NULL DEFAULT 0,
+                    metadata_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (office_id) REFERENCES offices(id) ON DELETE CASCADE,
+                    UNIQUE (office_id, provider, external_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS outbound_drafts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     office_id TEXT NOT NULL,
@@ -406,6 +446,10 @@ class Persistence:
                     ai_provider TEXT,
                     approval_status TEXT NOT NULL DEFAULT 'pending_review',
                     delivery_status TEXT NOT NULL DEFAULT 'not_sent',
+                    dispatch_state TEXT NOT NULL DEFAULT 'idle',
+                    dispatch_error TEXT,
+                    external_message_id TEXT,
+                    last_dispatch_at TEXT,
                     created_by TEXT NOT NULL,
                     approved_by TEXT,
                     created_at TEXT NOT NULL,
@@ -426,6 +470,10 @@ class Persistence:
                     target_channel TEXT,
                     draft_id INTEGER,
                     status TEXT NOT NULL DEFAULT 'suggested',
+                    dispatch_state TEXT NOT NULL DEFAULT 'idle',
+                    dispatch_error TEXT,
+                    external_message_id TEXT,
+                    last_dispatch_at TEXT,
                     manual_review_required INTEGER NOT NULL DEFAULT 1,
                     created_by TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -515,6 +563,8 @@ class Persistence:
                 CREATE INDEX IF NOT EXISTS idx_email_threads_office ON email_threads (office_id, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_calendar_events_office ON calendar_events (office_id, starts_at ASC);
                 CREATE INDEX IF NOT EXISTS idx_google_drive_files_office ON google_drive_files (office_id, modified_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_office ON whatsapp_messages (office_id, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_x_posts_office ON x_posts (office_id, posted_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_outbound_drafts_office ON outbound_drafts (office_id, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_outbound_drafts_matter ON outbound_drafts (matter_id, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_assistant_actions_office ON assistant_actions (office_id, updated_at DESC);
@@ -536,6 +586,16 @@ class Persistence:
             self._ensure_column(conn, "email_drafts", "office_id", "TEXT NOT NULL DEFAULT 'default-office'")
             self._ensure_column(conn, "email_drafts", "matter_id", "INTEGER")
             self._ensure_column(conn, "email_drafts", "review_status", "TEXT NOT NULL DEFAULT 'draft_ready'")
+            self._ensure_column(conn, "user_profiles", "favorite_color", "TEXT")
+            self._ensure_column(conn, "user_profiles", "related_profiles_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "outbound_drafts", "dispatch_state", "TEXT NOT NULL DEFAULT 'idle'")
+            self._ensure_column(conn, "outbound_drafts", "dispatch_error", "TEXT")
+            self._ensure_column(conn, "outbound_drafts", "external_message_id", "TEXT")
+            self._ensure_column(conn, "outbound_drafts", "last_dispatch_at", "TEXT")
+            self._ensure_column(conn, "assistant_actions", "dispatch_state", "TEXT NOT NULL DEFAULT 'idle'")
+            self._ensure_column(conn, "assistant_actions", "dispatch_error", "TEXT")
+            self._ensure_column(conn, "assistant_actions", "external_message_id", "TEXT")
+            self._ensure_column(conn, "assistant_actions", "last_dispatch_at", "TEXT")
             self._ensure_default_office(conn, "default-office", "Varsayilan Ofis", "local-only")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_matter ON tasks (matter_id, id DESC)")
             conn.execute("UPDATE matter_notes SET event_at=COALESCE(event_at, created_at)")
@@ -2033,6 +2093,7 @@ class Persistence:
         office_id: str,
         *,
         display_name: str | None = None,
+        favorite_color: str | None = None,
         food_preferences: str | None = None,
         transport_preference: str | None = None,
         weather_preference: str | None = None,
@@ -2040,6 +2101,7 @@ class Persistence:
         communication_style: str | None = None,
         assistant_notes: str | None = None,
         important_dates: list[dict[str, Any]] | None = None,
+        related_profiles: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         now = self._now()
         with self._conn() as conn:
@@ -2047,12 +2109,13 @@ class Persistence:
             conn.execute(
                 """
                 INSERT INTO user_profiles (
-                    office_id, display_name, food_preferences, transport_preference, weather_preference,
-                    travel_preferences, communication_style, assistant_notes, important_dates_json, created_at, updated_at
+                    office_id, display_name, favorite_color, food_preferences, transport_preference, weather_preference,
+                    travel_preferences, communication_style, assistant_notes, important_dates_json, related_profiles_json, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(office_id) DO UPDATE SET
                     display_name=excluded.display_name,
+                    favorite_color=excluded.favorite_color,
                     food_preferences=excluded.food_preferences,
                     transport_preference=excluded.transport_preference,
                     weather_preference=excluded.weather_preference,
@@ -2060,11 +2123,13 @@ class Persistence:
                     communication_style=excluded.communication_style,
                     assistant_notes=excluded.assistant_notes,
                     important_dates_json=excluded.important_dates_json,
+                    related_profiles_json=excluded.related_profiles_json,
                     updated_at=excluded.updated_at
                 """,
                 (
                     office_id,
                     display_name,
+                    favorite_color,
                     food_preferences,
                     transport_preference,
                     weather_preference,
@@ -2072,6 +2137,7 @@ class Persistence:
                     communication_style,
                     assistant_notes,
                     json.dumps(important_dates or [], ensure_ascii=False),
+                    json.dumps(related_profiles or [], ensure_ascii=False),
                     now,
                     now,
                 ),
@@ -2142,6 +2208,7 @@ class Persistence:
         return {
             "office_id": office_id,
             "display_name": "",
+            "favorite_color": "",
             "food_preferences": "",
             "transport_preference": "",
             "weather_preference": "",
@@ -2149,6 +2216,7 @@ class Persistence:
             "communication_style": "",
             "assistant_notes": "",
             "important_dates": [],
+            "related_profiles": [],
             "created_at": None,
             "updated_at": None,
         }
@@ -2156,13 +2224,16 @@ class Persistence:
     @staticmethod
     def _decode_user_profile(row: dict[str, Any]) -> dict[str, Any]:
         row = Persistence._decode_json_field(row, "important_dates_json", "important_dates")
+        row = Persistence._decode_json_field(row, "related_profiles_json", "related_profiles")
         row["display_name"] = row.get("display_name") or ""
+        row["favorite_color"] = row.get("favorite_color") or ""
         row["food_preferences"] = row.get("food_preferences") or ""
         row["transport_preference"] = row.get("transport_preference") or ""
         row["weather_preference"] = row.get("weather_preference") or ""
         row["travel_preferences"] = row.get("travel_preferences") or ""
         row["communication_style"] = row.get("communication_style") or ""
         row["assistant_notes"] = row.get("assistant_notes") or ""
+        row["related_profiles"] = row.get("related_profiles") or []
         return row
 
     @staticmethod
@@ -2399,6 +2470,156 @@ class Persistence:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def upsert_whatsapp_message(
+        self,
+        office_id: str,
+        *,
+        provider: str,
+        conversation_ref: str,
+        message_ref: str,
+        body: str,
+        sender: str | None = None,
+        recipient: str | None = None,
+        direction: str = "inbound",
+        sent_at: str | None = None,
+        reply_needed: bool = False,
+        matter_id: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO whatsapp_messages (
+                    office_id, provider, conversation_ref, message_ref, sender, recipient, body, direction,
+                    sent_at, reply_needed, matter_id, metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider, message_ref) DO UPDATE SET
+                    conversation_ref=excluded.conversation_ref,
+                    sender=excluded.sender,
+                    recipient=excluded.recipient,
+                    body=excluded.body,
+                    direction=excluded.direction,
+                    sent_at=excluded.sent_at,
+                    reply_needed=excluded.reply_needed,
+                    matter_id=excluded.matter_id,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    conversation_ref,
+                    message_ref,
+                    sender,
+                    recipient,
+                    body,
+                    direction,
+                    sent_at,
+                    1 if reply_needed else 0,
+                    matter_id,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM whatsapp_messages WHERE office_id=? AND provider=? AND message_ref=?",
+                (office_id, provider, message_ref),
+            ).fetchone()
+            return self._decode_whatsapp_message(dict(row)) if row else {}
+
+    def list_whatsapp_messages(self, office_id: str, *, reply_needed_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            query = "SELECT * FROM whatsapp_messages WHERE office_id=?"
+            params: list[Any] = [office_id]
+            if reply_needed_only:
+                query += " AND reply_needed=1"
+            query += " ORDER BY COALESCE(sent_at, updated_at) DESC, id DESC LIMIT ?"
+            params.append(max(1, min(limit, 200)))
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_whatsapp_message(dict(row)) for row in rows]
+
+    @staticmethod
+    def _decode_whatsapp_message(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "metadata_json", "metadata")
+        row["reply_needed"] = bool(row.get("reply_needed"))
+        return row
+
+    def upsert_x_post(
+        self,
+        office_id: str,
+        *,
+        provider: str,
+        external_id: str,
+        post_type: str,
+        content: str,
+        author_handle: str | None = None,
+        posted_at: str | None = None,
+        reply_needed: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        now = self._now()
+        with self._conn() as conn:
+            self._ensure_default_office(conn, office_id, "Varsayilan Ofis", "local-only")
+            conn.execute(
+                """
+                INSERT INTO x_posts (
+                    office_id, provider, external_id, post_type, author_handle, content, posted_at,
+                    reply_needed, metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(office_id, provider, external_id) DO UPDATE SET
+                    post_type=excluded.post_type,
+                    author_handle=excluded.author_handle,
+                    content=excluded.content,
+                    posted_at=excluded.posted_at,
+                    reply_needed=excluded.reply_needed,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    office_id,
+                    provider,
+                    external_id,
+                    post_type,
+                    author_handle,
+                    content,
+                    posted_at,
+                    1 if reply_needed else 0,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM x_posts WHERE office_id=? AND provider=? AND external_id=?",
+                (office_id, provider, external_id),
+            ).fetchone()
+            return self._decode_x_post(dict(row)) if row else {}
+
+    def list_x_posts(self, office_id: str, *, post_type: str | None = None, reply_needed_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            query = "SELECT * FROM x_posts WHERE office_id=?"
+            params: list[Any] = [office_id]
+            if post_type:
+                query += " AND post_type=?"
+                params.append(post_type)
+            if reply_needed_only:
+                query += " AND reply_needed=1"
+            query += " ORDER BY COALESCE(posted_at, updated_at) DESC, id DESC LIMIT ?"
+            params.append(max(1, min(limit, 200)))
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_x_post(dict(row)) for row in rows]
+
+    @staticmethod
+    def _decode_x_post(row: dict[str, Any]) -> dict[str, Any]:
+        row = Persistence._decode_json_field(row, "metadata_json", "metadata")
+        row["reply_needed"] = bool(row.get("reply_needed"))
+        return row
+
     def create_outbound_draft(
         self,
         office_id: str,
@@ -2480,6 +2701,10 @@ class Persistence:
         approval_status: str | None = None,
         delivery_status: str | None = None,
         approved_by: str | None = None,
+        dispatch_state: str | None = None,
+        dispatch_error: str | None = None,
+        external_message_id: str | None = None,
+        last_dispatch_at: str | None = None,
     ) -> dict[str, Any] | None:
         with self._conn() as conn:
             row = conn.execute(
@@ -2492,13 +2717,17 @@ class Persistence:
             conn.execute(
                 """
                 UPDATE outbound_drafts
-                SET approval_status=?, delivery_status=?, approved_by=?, updated_at=?
+                SET approval_status=?, delivery_status=?, approved_by=?, dispatch_state=?, dispatch_error=?, external_message_id=?, last_dispatch_at=?, updated_at=?
                 WHERE office_id=? AND id=?
                 """,
                 (
                     approval_status or current["approval_status"],
                     delivery_status or current["delivery_status"],
                     approved_by if approved_by is not None else current.get("approved_by"),
+                    dispatch_state if dispatch_state is not None else current.get("dispatch_state"),
+                    dispatch_error if dispatch_error is not None else current.get("dispatch_error"),
+                    external_message_id if external_message_id is not None else current.get("external_message_id"),
+                    last_dispatch_at if last_dispatch_at is not None else current.get("last_dispatch_at"),
                     self._now(),
                     office_id,
                     draft_id,
@@ -2513,6 +2742,9 @@ class Persistence:
     @staticmethod
     def _decode_outbound_draft(row: dict[str, Any]) -> dict[str, Any]:
         row = Persistence._decode_json_field(row, "source_context_json", "source_context")
+        row["dispatch_state"] = row.get("dispatch_state") or "idle"
+        row["dispatch_error"] = row.get("dispatch_error") or None
+        row["external_message_id"] = row.get("external_message_id") or None
         return row
 
     def create_assistant_action(
@@ -2592,7 +2824,32 @@ class Persistence:
             ).fetchone()
             return self._decode_assistant_action(dict(row)) if row else None
 
-    def update_assistant_action_status(self, office_id: str, action_id: int, status: str, *, draft_id: int | None = None) -> dict[str, Any] | None:
+    def get_assistant_action_by_draft_id(self, office_id: str, draft_id: int) -> dict[str, Any] | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM assistant_actions
+                WHERE office_id=? AND draft_id=?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 1
+                """,
+                (office_id, draft_id),
+            ).fetchone()
+            return self._decode_assistant_action(dict(row)) if row else None
+
+    def update_assistant_action_status(
+        self,
+        office_id: str,
+        action_id: int,
+        status: str,
+        *,
+        draft_id: int | None = None,
+        dispatch_state: str | None = None,
+        dispatch_error: str | None = None,
+        external_message_id: str | None = None,
+        last_dispatch_at: str | None = None,
+    ) -> dict[str, Any] | None:
         with self._conn() as conn:
             current = conn.execute(
                 "SELECT * FROM assistant_actions WHERE office_id=? AND id=?",
@@ -2601,8 +2858,22 @@ class Persistence:
             if not current:
                 return None
             conn.execute(
-                "UPDATE assistant_actions SET status=?, draft_id=?, updated_at=? WHERE office_id=? AND id=?",
-                (status, draft_id if draft_id is not None else current["draft_id"], self._now(), office_id, action_id),
+                """
+                UPDATE assistant_actions
+                SET status=?, draft_id=?, dispatch_state=?, dispatch_error=?, external_message_id=?, last_dispatch_at=?, updated_at=?
+                WHERE office_id=? AND id=?
+                """,
+                (
+                    status,
+                    draft_id if draft_id is not None else current["draft_id"],
+                    dispatch_state if dispatch_state is not None else current["dispatch_state"],
+                    dispatch_error if dispatch_error is not None else current["dispatch_error"],
+                    external_message_id if external_message_id is not None else current["external_message_id"],
+                    last_dispatch_at if last_dispatch_at is not None else current["last_dispatch_at"],
+                    self._now(),
+                    office_id,
+                    action_id,
+                ),
             )
             row = conn.execute(
                 "SELECT * FROM assistant_actions WHERE office_id=? AND id=?",
@@ -2614,6 +2885,9 @@ class Persistence:
     def _decode_assistant_action(row: dict[str, Any]) -> dict[str, Any]:
         row = Persistence._decode_json_field(row, "source_refs_json", "source_refs")
         row["manual_review_required"] = bool(row.get("manual_review_required"))
+        row["dispatch_state"] = row.get("dispatch_state") or "idle"
+        row["dispatch_error"] = row.get("dispatch_error") or None
+        row["external_message_id"] = row.get("external_message_id") or None
         return row
 
     def add_approval_event(

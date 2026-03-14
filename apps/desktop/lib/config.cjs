@@ -68,6 +68,9 @@ function defaultDesktopConfig(repoRoot, options = {}) {
       enabled: false,
       accountLabel: "",
       scopes: [...DEFAULT_GOOGLE_SCOPES],
+      clientId: "",
+      clientSecret: "",
+      redirectUri: "",
       oauthConnected: false,
       oauthLastError: "",
       configuredAt: "",
@@ -87,6 +90,37 @@ function defaultDesktopConfig(repoRoot, options = {}) {
       lastValidatedAt: "",
       validationStatus: "pending",
     },
+    whatsapp: {
+      enabled: false,
+      accessToken: "",
+      phoneNumberId: "",
+      businessLabel: "",
+      displayPhoneNumber: "",
+      verifiedName: "",
+      configuredAt: "",
+      lastValidatedAt: "",
+      validationStatus: "pending",
+      lastSyncAt: "",
+    },
+    x: {
+      enabled: false,
+      accountLabel: "",
+      userId: "",
+      clientId: "",
+      clientSecret: "",
+      redirectUri: "",
+      scopes: ["tweet.read", "tweet.write", "users.read", "offline.access"],
+      oauthConnected: false,
+      oauthLastError: "",
+      configuredAt: "",
+      lastValidatedAt: "",
+      validationStatus: "pending",
+      accessToken: "",
+      refreshToken: "",
+      tokenType: "",
+      expiryDate: "",
+      lastSyncAt: "",
+    },
   };
 }
 
@@ -95,6 +129,8 @@ function mergeDesktopConfig(current, patch) {
   next.provider = { ...(current.provider || {}), ...(patch.provider || {}) };
   next.google = { ...(current.google || {}), ...(patch.google || {}) };
   next.telegram = { ...(current.telegram || {}), ...(patch.telegram || {}) };
+  next.whatsapp = { ...(current.whatsapp || {}), ...(patch.whatsapp || {}) };
+  next.x = { ...(current.x || {}), ...(patch.x || {}) };
   return next;
 }
 
@@ -113,6 +149,8 @@ function sanitizeDesktopConfig(config) {
   const provider = config.provider || {};
   const google = config.google || {};
   const telegram = config.telegram || {};
+  const whatsapp = config.whatsapp || {};
+  const x = config.x || {};
   return {
     ...config,
     provider: {
@@ -141,7 +179,8 @@ function sanitizeDesktopConfig(config) {
       validationStatus: google.validationStatus || "pending",
       accessTokenConfigured: Boolean(google.accessToken),
       refreshTokenConfigured: Boolean(google.refreshToken),
-      clientIdConfigured: Boolean(process.env.LAWCOPILOT_GOOGLE_CLIENT_ID),
+      clientIdConfigured: Boolean(google.clientId || process.env.LAWCOPILOT_GOOGLE_CLIENT_ID),
+      clientSecretConfigured: Boolean(google.clientSecret || process.env.LAWCOPILOT_GOOGLE_CLIENT_SECRET),
     },
     telegram: {
       enabled: Boolean(telegram.enabled),
@@ -152,6 +191,35 @@ function sanitizeDesktopConfig(config) {
       validationStatus: telegram.validationStatus || "pending",
       botTokenConfigured: Boolean(telegram.botToken),
       botTokenMasked: maskSecret(telegram.botToken),
+    },
+    whatsapp: {
+      enabled: Boolean(whatsapp.enabled),
+      businessLabel: whatsapp.businessLabel || "",
+      displayPhoneNumber: whatsapp.displayPhoneNumber || "",
+      verifiedName: whatsapp.verifiedName || "",
+      phoneNumberId: whatsapp.phoneNumberId || "",
+      configuredAt: whatsapp.configuredAt || "",
+      lastValidatedAt: whatsapp.lastValidatedAt || "",
+      validationStatus: whatsapp.validationStatus || "pending",
+      lastSyncAt: whatsapp.lastSyncAt || "",
+      accessTokenConfigured: Boolean(whatsapp.accessToken),
+      accessTokenMasked: maskSecret(whatsapp.accessToken),
+    },
+    x: {
+      enabled: Boolean(x.enabled),
+      accountLabel: x.accountLabel || "",
+      userId: x.userId || "",
+      scopes: Array.isArray(x.scopes) ? x.scopes : [],
+      oauthConnected: Boolean(x.oauthConnected),
+      oauthLastError: x.oauthLastError || "",
+      configuredAt: x.configuredAt || "",
+      lastValidatedAt: x.lastValidatedAt || "",
+      validationStatus: x.validationStatus || "pending",
+      lastSyncAt: x.lastSyncAt || "",
+      accessTokenConfigured: Boolean(x.accessToken),
+      refreshTokenConfigured: Boolean(x.refreshToken),
+      clientIdConfigured: Boolean(x.clientId || process.env.LAWCOPILOT_X_CLIENT_ID),
+      clientSecretConfigured: Boolean(x.clientSecret || process.env.LAWCOPILOT_X_CLIENT_SECRET),
     },
   };
 }

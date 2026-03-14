@@ -50,6 +50,24 @@ def _next_profile_occurrence(item: dict[str, Any], today: date) -> tuple[date, i
     return candidate, (candidate - today).days
 
 
+def _related_profiles(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for raw in profile.get("related_profiles") or []:
+        if not isinstance(raw, dict):
+            continue
+        items.append(
+            {
+                "id": str(raw.get("id") or "").strip(),
+                "name": str(raw.get("name") or "").strip(),
+                "relationship": str(raw.get("relationship") or "").strip(),
+                "preferences": str(raw.get("preferences") or "").strip(),
+                "notes": str(raw.get("notes") or "").strip(),
+                "important_dates": list(raw.get("important_dates") or []),
+            }
+        )
+    return [item for item in items if item["name"]]
+
+
 def _upcoming_profile_dates(store, office_id: str, *, window_days: int) -> list[dict[str, Any]]:
     profile = store.get_user_profile(office_id)
     today = datetime.now(timezone.utc).date()
@@ -69,8 +87,40 @@ def _upcoming_profile_dates(store, office_id: str, *, window_days: int) -> list[
                 "date": occurrence.isoformat(),
                 "days_until": days_until,
                 "recurring_annually": bool(item.get("recurring_annually", True)),
+                "owner_name": str(profile.get("display_name") or "").strip(),
+                "relationship": "self",
+                "profile_type": "self",
             }
         )
+    for profile_index, related in enumerate(_related_profiles(profile), start=1):
+        owner_name = related["name"]
+        relationship = related["relationship"]
+        for date_index, item in enumerate(related.get("important_dates") or [], start=1):
+            resolved = _next_profile_occurrence(item, today)
+            if not resolved:
+                continue
+            occurrence, days_until = resolved
+            if days_until > window_days:
+                continue
+            label = str(item.get("label") or "Önemli tarih")
+            details = str(item.get("notes") or "").strip()
+            if related["preferences"]:
+                details = f"{details} {related['preferences']}".strip()
+            elif related["notes"]:
+                details = f"{details} {related['notes']}".strip()
+            items.append(
+                {
+                    "id": f"related-profile-date-{profile_index}-{date_index}",
+                    "label": f"{owner_name}: {label}" if owner_name else label,
+                    "notes": details,
+                    "date": occurrence.isoformat(),
+                    "days_until": days_until,
+                    "recurring_annually": bool(item.get("recurring_annually", True)),
+                    "owner_name": owner_name,
+                    "relationship": relationship,
+                    "profile_type": "related",
+                }
+            )
     items.sort(key=lambda item: (item["days_until"], item["label"]))
     return items
 
@@ -107,6 +157,8 @@ def sync_connected_accounts_from_settings(settings, store) -> list[dict[str, Any
                 },
             )
         )
+    elif store.get_connected_account(settings.office_id, "google"):
+        accounts.append(store.get_connected_account(settings.office_id, "google"))
     if settings.telegram_enabled or settings.telegram_configured:
         accounts.append(
             store.upsert_connected_account(
@@ -120,7 +172,351 @@ def sync_connected_accounts_from_settings(settings, store) -> list[dict[str, Any
                 metadata={"allowed_user_id": settings.telegram_allowed_user_id},
             )
         )
+    elif store.get_connected_account(settings.office_id, "telegram"):
+        accounts.append(store.get_connected_account(settings.office_id, "telegram"))
+    if settings.whatsapp_enabled or settings.whatsapp_configured:
+        accounts.append(
+            store.upsert_connected_account(
+                settings.office_id,
+                "whatsapp",
+                account_label=settings.whatsapp_account_label or settings.whatsapp_display_phone_number or "WhatsApp hesabı",
+                status="connected" if settings.whatsapp_configured else "pending",
+                scopes=["messages:read", "messages:send"],
+                connected_at=datetime.now(timezone.utc).isoformat() if settings.whatsapp_configured else None,
+                manual_review_required=True,
+                metadata={
+                    "phone_number_id": settings.whatsapp_phone_number_id,
+                    "display_phone_number": settings.whatsapp_display_phone_number,
+                },
+            )
+        )
+    elif store.get_connected_account(settings.office_id, "whatsapp"):
+        accounts.append(store.get_connected_account(settings.office_id, "whatsapp"))
+    if settings.x_enabled or settings.x_configured:
+        accounts.append(
+            store.upsert_connected_account(
+                settings.office_id,
+                "x",
+                account_label=settings.x_account_label or "X hesabı",
+                status="connected" if settings.x_configured else "pending",
+                scopes=list(settings.x_scopes or []),
+                connected_at=datetime.now(timezone.utc).isoformat() if settings.x_configured else None,
+                manual_review_required=True,
+                metadata={"user_id": settings.x_user_id},
+            )
+        )
+    elif store.get_connected_account(settings.office_id, "x"):
+        accounts.append(store.get_connected_account(settings.office_id, "x"))
     return store.list_connected_accounts(settings.office_id)
+
+
+def _profile_preferences_count(profile: dict[str, Any]) -> int:
+    fields = [
+        profile.get("favorite_color"),
+        profile.get("food_preferences"),
+        profile.get("transport_preference"),
+        profile.get("weather_preference"),
+        profile.get("travel_preferences"),
+        profile.get("communication_style"),
+        profile.get("assistant_notes"),
+    ]
+    count = len([value for value in fields if str(value or "").strip()])
+    if _related_profiles(profile):
+        count += 1
+    return count
+
+
+def _profile_display_name(profile: dict[str, Any]) -> str:
+    return str(profile.get("display_name") or "").strip()
+
+
+def _profile_preference_text(profile: dict[str, Any]) -> str:
+    return " ".join(
+        str(profile.get(field) or "").strip()
+        for field in [
+            "assistant_notes",
+            "travel_preferences",
+            "transport_preference",
+            "weather_preference",
+            "food_preferences",
+            "communication_style",
+        ]
+    ).lower()
+
+
+def _turkish_month_name(month: int) -> str:
+    months = {
+        1: "Ocak",
+        2: "Şubat",
+        3: "Mart",
+        4: "Nisan",
+        5: "Mayıs",
+        6: "Haziran",
+        7: "Temmuz",
+        8: "Ağustos",
+        9: "Eylül",
+        10: "Ekim",
+        11: "Kasım",
+        12: "Aralık",
+    }
+    return months.get(int(month), "Tarih")
+
+
+def _format_turkish_day_label(value: datetime | date | None) -> str:
+    if value is None:
+        return "yakın tarih"
+    base = value.date() if isinstance(value, datetime) else value
+    return f"{base.day} {_turkish_month_name(base.month)}"
+
+
+def _format_time_window(start: datetime | None, end: datetime | None) -> str:
+    if not start:
+        return "uygun zaman"
+    if not end:
+        return start.strftime("%H:%M")
+    return f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}"
+
+
+def _find_calendar_gap(items: list[dict[str, Any]], *, window_days: int = 14, minimum_hours: int = 4) -> dict[str, Any] | None:
+    now = datetime.now(timezone.utc)
+    grouped: dict[date, list[tuple[datetime, datetime]]] = {}
+
+    for item in items:
+        starts_at = _parse_dt(item.get("starts_at"))
+        if not starts_at:
+            continue
+        ends_at = _parse_dt(item.get("ends_at")) or (starts_at + timedelta(hours=1))
+        grouped.setdefault(starts_at.date(), []).append((starts_at, ends_at))
+
+    for offset in range(0, max(1, window_days) + 1):
+        current_day = (now + timedelta(days=offset)).date()
+        business_start = datetime.combine(current_day, datetime.min.time(), tzinfo=timezone.utc).replace(hour=9)
+        business_end = datetime.combine(current_day, datetime.min.time(), tzinfo=timezone.utc).replace(hour=20)
+        cursor = max(now + timedelta(minutes=30), business_start) if current_day == now.date() else business_start
+        blocks = sorted(grouped.get(current_day, []), key=lambda item: item[0])
+
+        if not blocks and (business_end - cursor) >= timedelta(hours=minimum_hours):
+            return {
+                "day": current_day.isoformat(),
+                "label": _format_turkish_day_label(current_day),
+                "starts_at": cursor.isoformat(),
+                "ends_at": business_end.isoformat(),
+                "time_window": _format_time_window(cursor, business_end),
+            }
+
+        for starts_at, ends_at in blocks:
+            normalized_start = max(starts_at, business_start)
+            normalized_end = min(ends_at, business_end)
+            if normalized_end <= cursor:
+                continue
+            if normalized_start > cursor and (normalized_start - cursor) >= timedelta(hours=minimum_hours):
+                return {
+                    "day": current_day.isoformat(),
+                    "label": _format_turkish_day_label(current_day),
+                    "starts_at": cursor.isoformat(),
+                    "ends_at": normalized_start.isoformat(),
+                    "time_window": _format_time_window(cursor, normalized_start),
+                }
+            cursor = max(cursor, normalized_end)
+
+        if business_end > cursor and (business_end - cursor) >= timedelta(hours=minimum_hours):
+            return {
+                "day": current_day.isoformat(),
+                "label": _format_turkish_day_label(current_day),
+                "starts_at": cursor.isoformat(),
+                "ends_at": business_end.isoformat(),
+                "time_window": _format_time_window(cursor, business_end),
+            }
+    return None
+
+
+def _build_proactive_suggestions(
+    store,
+    office_id: str,
+    *,
+    profile: dict[str, Any],
+    inbox: list[dict[str, Any]],
+    calendar: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+    display_name = _profile_display_name(profile) or "orada"
+    preference_text = _profile_preference_text(profile)
+    likes_train = "tren" in preference_text
+    likes_sea = any(token in preference_text for token in ["deniz", "sahil", "kıyı", "kiyi", "tekne"])
+
+    for item in calendar:
+        starts_at = _parse_dt(item.get("starts_at"))
+        matter_id = item.get("matter_id")
+        if not starts_at or not matter_id:
+            continue
+        if starts_at < now or starts_at > now + timedelta(days=3):
+            continue
+        matter = store.get_matter(int(matter_id), office_id)
+        matter_title = str(matter.get("title") or item.get("title") or "dosya")
+        event_title = str(item.get("title") or "takvim kaydı")
+        day_label = _format_turkish_day_label(starts_at)
+        suggestions.append(
+            {
+                "id": f"proactive-client-update-{item['id']}",
+                "kind": "draft_client_update",
+                "title": f"{event_title} için müvekkil teyidi hazırlanabilir",
+                "details": f"{day_label} planlı {event_title} için müvekkile kısa bir teyit e-postası taslağı hazırlayabilirim.",
+                "action_label": "Taslak hazırla",
+                "prompt": f"E-posta hazırla: {matter_title} için {day_label} tarihli {event_title} öncesi müvekkile kısa teyit mesajı oluştur.",
+                "matter_id": int(matter_id),
+                "tool": "drafts",
+                "priority": "high",
+            }
+        )
+        break
+
+    gap = _find_calendar_gap(calendar, window_days=14, minimum_hours=4)
+    if gap and (likes_train or likes_sea or str(profile.get("travel_preferences") or "").strip()):
+        preference_parts: list[str] = []
+        if likes_sea:
+            preference_parts.append("deniz kenarı")
+        if likes_train:
+            preference_parts.append("tren yolculuğu")
+        preference_label = " ve ".join(preference_parts) if preference_parts else "seyahat tercihlerin"
+        gap_key = f"{gap['label']}-{gap['time_window']}".lower().replace(" ", "-").replace(":", "")
+        suggestions.append(
+            {
+                "id": f"proactive-travel-gap-{gap_key}",
+                "kind": "travel_gap",
+                "title": f"{gap['label']} boşluğunu birlikte netleştirelim",
+                "details": (
+                    f"{display_name}, takviminde {gap['time_window']} arasında uygun bir boşluk görünüyor. "
+                    f"{preference_label} sevdiğini not ettim. İstersen önce bu boşluğu nasıl değerlendirmek istediğini birlikte netleştirelim, "
+                    "sonra sana uygun rota veya bilet bakarım."
+                ),
+                "action_label": "Bu planı konuşalım",
+                "prompt": (
+                    f"{gap['label']} için biraz önce önerdiğin boşluğu benimle konuş. "
+                    "Önce bunu neden önerdiğini açık ve kısa biçimde anlat. "
+                    "Ardından bu boşluğu nasıl değerlendirmek istediğimi anlamak için gerekli soruları tek tek sor. "
+                    "Henüz rota veya bilet önermeye başlama."
+                ),
+                "tool": "calendar",
+                "priority": "medium",
+            }
+        )
+
+    upcoming_dates = _upcoming_profile_dates(store, office_id, window_days=10)
+    related_upcoming = next((item for item in upcoming_dates if item.get("profile_type") == "related"), None)
+    if related_upcoming:
+        owner_name = str(related_upcoming.get("owner_name") or "yakınınız").strip()
+        relationship = str(related_upcoming.get("relationship") or "").strip()
+        label = str(related_upcoming.get("label") or "önemli tarih").strip()
+        days_until = int(related_upcoming.get("days_until") or 0)
+        date_label = _format_turkish_day_label(_parse_profile_date(str(related_upcoming.get("date") or "")))
+        timing_text = "bugün" if days_until == 0 else "yarın" if days_until == 1 else f"{days_until} gün sonra"
+        relationship_text = f"{relationship} " if relationship else ""
+        suggestions.append(
+            {
+                "id": f"proactive-related-{related_upcoming['id']}",
+                "kind": "family_preparation",
+                "title": f"{owner_name} için hazırlık çıkarayım",
+                "details": f"{relationship_text}{owner_name} ile ilgili {label} {date_label} tarihinde ({timing_text}). İstersen mesaj taslağı, hatırlatma ve kısa hazırlık listesi çıkarayım.",
+                "action_label": "Hazırlığı çıkar",
+                "prompt": f"{owner_name} için yaklaşan {label} konusunda kısa hazırlık listesi, takvim önerisi ve nazik mesaj taslağı hazırla.",
+                "tool": "today",
+                "priority": "high" if days_until <= 2 else "medium",
+            }
+        )
+
+    if inbox:
+        first_item = inbox[0]
+        suggestions.append(
+            {
+                "id": "proactive-inbox-review",
+                "kind": "inbox_review",
+                "title": "Yanıt bekleyen iletişimler öne alınmalı",
+                "details": f"{len(inbox)} iletişim yanıt bekliyor. İstersen önce en acil olanı sıralayıp sana yanıt yaklaşımı çıkarayım.",
+                "action_label": "İletişimleri önceliklendir",
+                "prompt": f"Yanıt bekleyen iletişimleri önem sırasına koy ve önce {first_item.get('title') or 'ilk iletişim'} için nasıl yanıt vermem gerektiğini özetle.",
+                "tool": "today",
+                "priority": "medium",
+            }
+        )
+
+    return suggestions[:3]
+
+
+def build_assistant_onboarding(store, settings, office_id: str) -> dict[str, Any]:
+    profile = store.get_user_profile(office_id)
+    runtime_profile = store.get_assistant_runtime_profile(office_id)
+    workspace_root = store.get_active_workspace_root(office_id)
+
+    workspace_ready = bool(workspace_root)
+    provider_ready = bool(settings.provider_configured and str(settings.provider_model or "").strip())
+    assistant_ready = bool(str(runtime_profile.get("assistant_name") or "").strip() and str(runtime_profile.get("soul_notes") or runtime_profile.get("tone") or "").strip())
+    user_ready = bool(str(profile.get("display_name") or "").strip() and _profile_preferences_count(profile) >= 2)
+
+    steps = [
+        {
+            "id": "workspace",
+            "title": "Çalışma klasörünü bağlayın",
+            "description": "Uygulama yalnız seçtiğiniz klasör ağacında çalışır.",
+            "complete": workspace_ready,
+            "action": "choose_workspace",
+        },
+        {
+            "id": "provider",
+            "title": "Sağlayıcı ve modeli seçin",
+            "description": "Codex veya Gemini gibi sağlayıcıyı bağlayıp başlangıç modelini belirleyin.",
+            "complete": provider_ready,
+            "action": "connect_provider",
+        },
+        {
+            "id": "assistant-persona",
+            "title": "Asistanın kimliğini tanımlayın",
+            "description": "Adı ne olsun, nasıl konuşsun, ne kadar şakacı veya resmi olsun gibi tercihleri netleştirin.",
+            "complete": assistant_ready,
+            "action": "open_assistant_chat",
+        },
+        {
+            "id": "user-profile",
+            "title": "Kullanıcı profilini başlatın",
+            "description": "Hitap şekli, renk, ulaşım, yeme içme ve diğer tercihleri sohbetle toplayın.",
+            "complete": user_ready,
+            "action": "open_assistant_chat",
+        },
+    ]
+
+    prompts: list[str] = []
+    if not assistant_ready:
+        prompts.extend(
+            [
+                "Önce seni nasıl çağırmamı istersin?",
+                "Nasıl bir asistan olayım: daha şakacı, daha resmi, daha kısa ya da daha detaylı mı?",
+            ]
+        )
+    if not user_ready:
+        prompts.extend(
+            [
+                "Sana nasıl hitap etmemi istersin?",
+                "En sevdiğin renk ne?",
+                "Hangi ulaşım aracını genelde tercih edersin?",
+                "Kısa ve net mi yoksa daha detaylı mı konuşmamı istersin?",
+            ]
+        )
+
+    return {
+        "complete": all(bool(step["complete"]) for step in steps),
+        "workspace_ready": workspace_ready,
+        "provider_ready": provider_ready,
+        "assistant_ready": assistant_ready,
+        "user_ready": user_ready,
+        "provider_type": settings.provider_type,
+        "provider_model": settings.provider_model,
+        "workspace_root_name": workspace_root.get("display_name") if workspace_root else None,
+        "assistant_name": runtime_profile.get("assistant_name") or "",
+        "display_name": profile.get("display_name") or "",
+        "steps": steps,
+        "suggested_prompts": prompts[:6],
+        "generated_from": "assistant_onboarding_state",
+    }
 
 
 def build_assistant_inbox(store, office_id: str) -> list[dict[str, Any]]:
@@ -137,6 +533,38 @@ def build_assistant_inbox(store, office_id: str) -> list[dict[str, Any]]:
                 "source_type": "email_thread",
                 "source_ref": thread.get("thread_ref"),
                 "matter_id": thread.get("matter_id"),
+                "manual_review_required": True,
+                "recommended_action_ids": [],
+            }
+        )
+    for message in store.list_whatsapp_messages(office_id, reply_needed_only=True, limit=20):
+        items.append(
+            {
+                "id": f"whatsapp-{message['id']}",
+                "kind": "reply_needed",
+                "title": message.get("sender") or message.get("recipient") or "WhatsApp konuşması",
+                "details": message.get("body") or "Yanıt bekleyen WhatsApp mesajı.",
+                "priority": "high" if message.get("direction") == "inbound" else "medium",
+                "due_at": message.get("sent_at"),
+                "source_type": "whatsapp_message",
+                "source_ref": message.get("message_ref"),
+                "matter_id": message.get("matter_id"),
+                "manual_review_required": True,
+                "recommended_action_ids": [],
+            }
+        )
+    for post in store.list_x_posts(office_id, post_type="mention", reply_needed_only=True, limit=20):
+        items.append(
+            {
+                "id": f"x-{post['id']}",
+                "kind": "reply_needed",
+                "title": post.get("author_handle") or "X mention",
+                "details": post.get("content") or "Yanıt bekleyen X mention.",
+                "priority": "medium",
+                "due_at": post.get("posted_at"),
+                "source_type": "x_post",
+                "source_ref": post.get("external_id"),
+                "matter_id": None,
                 "manual_review_required": True,
                 "recommended_action_ids": [],
             }
@@ -335,12 +763,22 @@ def build_assistant_calendar(store, office_id: str, *, window_days: int = 35) ->
     return items
 
 
-def build_assistant_home(store, office_id: str) -> dict[str, Any]:
+def build_assistant_home(store, office_id: str, *, settings=None) -> dict[str, Any]:
     agenda = build_assistant_agenda(store, office_id)
     inbox = build_assistant_inbox(store, office_id)
     calendar = build_assistant_calendar(store, office_id, window_days=7)
     drafts = store.list_outbound_drafts(office_id)
     connected_accounts = store.list_connected_accounts(office_id)
+    profile = store.get_user_profile(office_id)
+    display_name = _profile_display_name(profile)
+    related_profiles = _related_profiles(profile)
+    proactive_suggestions = _build_proactive_suggestions(
+        store,
+        office_id,
+        profile=profile,
+        inbox=inbox,
+        calendar=calendar,
+    )
 
     priority_items: list[dict[str, Any]] = []
     for item in agenda[:6]:
@@ -358,6 +796,19 @@ def build_assistant_home(store, office_id: str) -> dict[str, Any]:
         )
 
     requires_setup: list[dict[str, Any]] = []
+    if settings is not None:
+        onboarding = build_assistant_onboarding(store, settings, office_id)
+        for step in onboarding["steps"]:
+            if step["complete"]:
+                continue
+            requires_setup.append(
+                {
+                    "id": f"setup-{step['id']}",
+                    "title": step["title"],
+                    "details": step["description"],
+                    "action": "open_onboarding",
+                }
+            )
     providers = {str(item.get("provider") or "") for item in connected_accounts}
     if "google" not in providers:
         requires_setup.append(
@@ -377,20 +828,52 @@ def build_assistant_home(store, office_id: str) -> dict[str, Any]:
                 "action": "open_settings",
             }
         )
+    if "whatsapp" not in providers:
+        requires_setup.append(
+            {
+                "id": "setup-whatsapp",
+                "title": "WhatsApp hesabını bağlayın",
+                "details": "Mesajları izlemek ve onaylı WhatsApp yanıtları hazırlamak için bu bağlantı gerekli.",
+                "action": "open_settings",
+            }
+        )
+    if "x" not in providers:
+        requires_setup.append(
+            {
+                "id": "setup-x",
+                "title": "X hesabını bağlayın",
+                "details": "Mention takibi ve onaylı gönderi paylaşımı için X bağlantısını tamamlayın.",
+                "action": "open_settings",
+            }
+        )
 
     today_summary_lines = [
-        f"Bugün {len(agenda)} ajanda maddesi, {len(inbox)} cevap bekleyen iletişim ve {len([item for item in drafts if item.get('approval_status') != 'approved'])} onay bekleyen taslak var."
+        f"Şu anda {len(agenda)} ajanda maddesi, {len(inbox)} cevap bekleyen iletişim ve {len([item for item in drafts if item.get('approval_status') != 'approved'])} onay bekleyen taslak var."
     ]
     if calendar:
         first_event = calendar[0]
+        first_event_dt = _parse_dt(first_event.get("starts_at"))
+        first_event_label = _format_turkish_day_label(first_event_dt)
+        first_event_time = _format_time_window(first_event_dt, None)
         today_summary_lines.append(
-            f"Yaklaşan ilk kayıt: {first_event.get('title')} ({first_event.get('starts_at') or 'zaman bilgisi yok'})."
+            f"Yaklaşan ilk kayıt: {first_event.get('title') or 'takvim kaydı'} ({first_event_label}, {first_event_time})."
         )
     if priority_items:
         today_summary_lines.append(f"Öne çıkan ilk iş: {priority_items[0]['title']}.")
 
+    greeting_message = (
+        f"{display_name}, takvimini, iletişimlerini ve açık işlerini gözden geçirdim."
+        if display_name
+        else "Takvimini, iletişimlerini ve açık işlerini gözden geçirdim."
+    )
+    if related_profiles:
+        greeting_message = f"{greeting_message} Yakın çevre notlarını da kontrol ettim."
+
     return {
         "today_summary": " ".join(today_summary_lines),
+        "display_name": display_name,
+        "greeting_title": f"Selam {display_name}" if display_name else "Selam",
+        "greeting_message": greeting_message,
         "counts": {
             "agenda": len(agenda),
             "inbox": len(inbox),
@@ -398,6 +881,7 @@ def build_assistant_home(store, office_id: str) -> dict[str, Any]:
             "calendar_today": len(calendar),
         },
         "priority_items": priority_items,
+        "proactive_suggestions": proactive_suggestions,
         "requires_setup": requires_setup,
         "connected_accounts": connected_accounts,
         "generated_from": "assistant_home_engine",

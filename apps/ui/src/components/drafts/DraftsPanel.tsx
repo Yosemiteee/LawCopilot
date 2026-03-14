@@ -221,7 +221,7 @@ export function DraftsPanel({ matterId, matterLabel }: { matterId: number; matte
                         sourceLookup.workspaceDocuments,
                         matterId,
                       )}
-                      buttonLabel="Belgeyi aç"
+                      buttonLabel="Belgeyi incele"
                     />
                   </div>
                 ) : null}

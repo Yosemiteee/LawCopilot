@@ -130,7 +130,16 @@ export function DashboardPage() {
   async function handleApproveAction(actionId: number) {
     setIsMutating(true);
     try {
-      await approveAssistantAction(settings, actionId, "Arayüz üzerinden onaylandı.");
+      const response = await approveAssistantAction(settings, actionId, "Arayüz üzerinden onaylandı.");
+      if (response.dispatch_mode === "ready_to_send" && response.draft && window.lawcopilotDesktop?.dispatchApprovedAction) {
+        await window.lawcopilotDesktop.dispatchApprovedAction({
+          action: response.action,
+          draft: response.draft,
+          actionId: response.action?.id,
+          draftId: response.draft?.id,
+          channel: response.draft?.channel || response.action?.target_channel,
+        });
+      }
       await refreshSurface();
       setError("");
     } catch (err) {
@@ -156,7 +165,18 @@ export function DashboardPage() {
   async function handleSendDraft(draftId: number) {
     setIsMutating(true);
     try {
-      await sendAssistantDraft(settings, draftId, "Arayüz üzerinden gönderim denendi.");
+      const response = await sendAssistantDraft(settings, draftId, "Arayüz üzerinden gönderim denendi.");
+      if (response.dispatch_mode === "ready_to_send" && window.lawcopilotDesktop?.dispatchApprovedAction) {
+        const draft = response.draft;
+        const relatedAction = actions.find((item) => Number(item.draft_id) === Number(draft.id));
+        await window.lawcopilotDesktop.dispatchApprovedAction({
+          action: relatedAction || null,
+          draft,
+          actionId: relatedAction?.id,
+          draftId: draft.id,
+          channel: draft.channel,
+        });
+      }
       await refreshSurface();
       setError("");
     } catch (err) {

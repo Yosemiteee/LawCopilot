@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import time
@@ -9,7 +10,11 @@ from fastapi.testclient import TestClient
 import lawcopilot_api.app as app_module
 from lawcopilot_api.app import create_app
 from lawcopilot_api.llm.base import LLMGenerationResult
+from lawcopilot_api.llm.direct_provider import DirectProviderLLM
+import lawcopilot_api.llm.direct_provider as direct_provider_module
+from lawcopilot_api.memory.service import MemoryService
 from lawcopilot_api.openclaw_runtime import OpenClawRuntime
+from lawcopilot_api.persistence import Persistence
 
 
 app = create_app()
@@ -108,6 +113,64 @@ def test_query_uses_direct_provider_when_configured(monkeypatch):
     assert body["ai_model"] == "gpt-4.1-mini"
 
 
+def test_direct_provider_supports_gemini_native_generate_content(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class _FakeResponse:
+        def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
+            self._payload = payload
+            self.status_code = status_code
+            self.text = json.dumps(payload, ensure_ascii=False)
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            captured["timeout"] = kwargs.get("timeout")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, *, params=None, headers=None, json=None):
+            captured["url"] = url
+            captured["params"] = params
+            captured["headers"] = headers
+            captured["body"] = json
+            return _FakeResponse(
+                {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {"text": "Gemini yanıtı"}
+                                ]
+                            }
+                        }
+                    ]
+                }
+            )
+
+    monkeypatch.setattr(direct_provider_module.httpx, "Client", _FakeClient)
+    llm = DirectProviderLLM(
+        provider_type="gemini",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        model="gemini-2.5-flash",
+        api_key="gemini-test-key",
+        configured=True,
+    )
+
+    result = llm.generate("Merhaba")
+    assert result.ok is True
+    assert result.text == "Gemini yanıtı"
+    assert result.provider == "gemini"
+    assert str(captured["url"]).endswith("/models/gemini-2.5-flash:generateContent")
+    assert captured["params"] == {"key": "gemini-test-key"}
+
+
 def test_assistant_tools_status_and_approval_endpoints(monkeypatch):
     temp_root = tempfile.mkdtemp(prefix="lawcopilot-approval-tools-")
     monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
@@ -157,6 +220,210 @@ def test_assistant_tools_status_and_approval_endpoints(monkeypatch):
     )
     assert approved.status_code == 200
     assert approved.json()["action"]["status"] == "approved"
+
+
+def test_assistant_thread_creates_email_draft_from_recent_context(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-thread-email-draft-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+
+    scoped_client = TestClient(create_app())
+    token = scoped_client.post("/auth/token", json={"subject": "intern-user", "role": "intern"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    first = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "samiyusuf178@gmail.com adresine selamımı ilet"},
+    )
+    assert first.status_code == 200
+
+    second = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "taslaklarda oluştur bu maili"},
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["draft_preview"]["to_contact"] == "samiyusuf178@gmail.com"
+    assert second_body["draft_preview"]["subject"] == "Selam"
+    assert "Merhaba" in second_body["draft_preview"]["body"]
+
+    drafts = scoped_client.get("/assistant/drafts", headers=headers)
+    assert drafts.status_code == 200
+    draft_items = drafts.json()["items"]
+    assert any(
+        item["to_contact"] == "samiyusuf178@gmail.com"
+        and item["subject"] == "Selam"
+        and item["draft_type"] == "send_email"
+        for item in draft_items
+    )
+
+
+def test_assistant_thread_creates_email_draft_from_extended_context(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-thread-email-history-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+
+    scoped_client = TestClient(create_app())
+    token = scoped_client.post("/auth/token", json={"subject": "intern-user", "role": "intern"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    first = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "samiyusuf178@gmail.com adresine selamımı ilet"},
+    )
+    assert first.status_code == 200
+
+    for prompt in [
+        "naber",
+        "bugün ne var",
+        "takvimimde ne görünüyor",
+        "dosyalarımı say",
+    ]:
+        response = scoped_client.post(
+            "/assistant/thread/messages",
+            headers=headers,
+            json={"content": prompt},
+        )
+        assert response.status_code == 200
+
+    second = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "taslağa ekle maili"},
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["draft_preview"]["to_contact"] == "samiyusuf178@gmail.com"
+    assert second_body["draft_preview"]["subject"] == "Selam"
+    assert "Merhaba" in second_body["draft_preview"]["body"]
+
+    drafts = scoped_client.get("/assistant/drafts", headers=headers)
+    assert drafts.status_code == 200
+    draft_items = drafts.json()["items"]
+    assert any(
+        item["to_contact"] == "samiyusuf178@gmail.com"
+        and item["subject"] == "Selam"
+        and item["draft_type"] == "send_email"
+        for item in draft_items
+    )
+
+
+def test_assistant_thread_creates_email_draft_from_taslaklar_phrase(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-thread-email-taslaklar-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+
+    scoped_client = TestClient(create_app())
+    token = scoped_client.post("/auth/token", json={"subject": "intern-user", "role": "intern"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    first = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "samiyusuf178@gmail.com adresine selamımı ileten kısa bir mail hazırla"},
+    )
+    assert first.status_code == 200
+    assert first.json()["draft_preview"]["to_contact"] == "samiyusuf178@gmail.com"
+
+    second = scoped_client.post(
+        "/assistant/thread/messages",
+        headers=headers,
+        json={"content": "Taslaklar kısmına ekle bu maili"},
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["draft_preview"]["to_contact"] == "samiyusuf178@gmail.com"
+    assert second_body["draft_preview"]["subject"] == "Selam"
+
+    drafts = scoped_client.get("/assistant/drafts", headers=headers)
+    assert drafts.status_code == 200
+    draft_items = drafts.json()["items"]
+    assert any(
+        item["to_contact"] == "samiyusuf178@gmail.com"
+        and item["subject"] == "Selam"
+        and item["draft_type"] == "send_email"
+        for item in draft_items
+    )
+
+
+def test_assistant_home_greets_user_and_returns_proactive_suggestions(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-home-proactive-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+
+    scoped_client = TestClient(create_app())
+    lawyer = scoped_client.post("/auth/token", json={"subject": "planner-lawyer", "role": "lawyer"}).json()["access_token"]
+    intern = scoped_client.post("/auth/token", json={"subject": "planner-intern", "role": "intern"}).json()["access_token"]
+
+    profile = scoped_client.put(
+        "/profile",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "display_name": "Sami",
+            "transport_preference": "Trenle yolculuk etmeyi sever.",
+            "weather_preference": "Ilık ve güneşli havayı sever.",
+            "travel_preferences": "Deniz kenarında kısa kaçamakları sever.",
+            "communication_style": "Kısa ve net öneriler ister.",
+            "assistant_notes": "Takvim boşluklarını erkenden değerlendirmeyi sever.",
+            "important_dates": [],
+            "related_profiles": [
+                {
+                    "name": "Ece",
+                    "relationship": "Eşi",
+                    "preferences": "Deniz kenarı ve sakin akşam yemeklerini sever.",
+                    "notes": "Önemli günlerde önceden hazırlık yapılmasını ister.",
+                    "important_dates": [
+                        {
+                            "label": "Evlilik yıldönümü",
+                            "date": (datetime.now(timezone.utc).date() + timedelta(days=3)).isoformat(),
+                            "recurring_annually": True,
+                            "notes": "Mesaj taslağı ve rezervasyon notu öner.",
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    assert profile.status_code == 200
+
+    matter = scoped_client.post(
+        "/matters",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"title": "Tahliye Dosyası", "client_name": "Ayşe Kaya"},
+    )
+    assert matter.status_code == 200
+    matter_id = matter.json()["id"]
+
+    starts_at = (datetime.now(timezone.utc) + timedelta(days=1, hours=2)).replace(minute=0, second=0, microsecond=0)
+    event = scoped_client.post(
+        "/assistant/calendar/events",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "title": "Müvekkil planlama görüşmesi",
+            "starts_at": starts_at.isoformat(),
+            "ends_at": (starts_at + timedelta(hours=1)).isoformat(),
+            "matter_id": matter_id,
+            "needs_preparation": True,
+        },
+    )
+    assert event.status_code == 200
+
+    home = scoped_client.get("/assistant/home", headers={"Authorization": f"Bearer {intern}"})
+    assert home.status_code == 200
+    body = home.json()
+    assert body["greeting_title"] == "Selam Sami"
+    assert "Selam Sami." in body["today_summary"]
+    assert body["proactive_suggestions"]
+    assert any(item["kind"] == "draft_client_update" for item in body["proactive_suggestions"])
+    assert any("tren" in item["details"].lower() or "bilet" in item["details"].lower() for item in body["proactive_suggestions"])
+    assert any(item["kind"] == "family_preparation" for item in body["proactive_suggestions"])
 
 
 def test_query_requires_bearer_by_default():
@@ -456,14 +723,32 @@ def test_user_profile_roundtrip_and_assistant_personal_dates():
                     "notes": "Çiçek veya akşam yemeği planı öner.",
                 }
             ],
+            "related_profiles": [
+                {
+                    "name": "Defne",
+                    "relationship": "Kızı",
+                    "preferences": "Hafta sonu deniz ve dondurma planlarını sever.",
+                    "notes": "Sınav haftasında daha erken hatırlatma ver.",
+                    "important_dates": [
+                        {
+                            "label": "Doğum günü",
+                            "date": upcoming,
+                            "recurring_annually": True,
+                            "notes": "Küçük kutlama planı öner.",
+                        }
+                    ],
+                }
+            ],
         },
     )
     assert saved.status_code == 200
     assert saved.json()["profile"]["display_name"] == "Sami"
+    assert saved.json()["profile"]["related_profiles"][0]["name"] == "Defne"
 
     fetched = client.get("/profile", headers={"Authorization": f"Bearer {intern}"})
     assert fetched.status_code == 200
     assert fetched.json()["transport_preference"] == "Mümkünse tren tercih eder."
+    assert fetched.json()["related_profiles"][0]["relationship"] == "Kızı"
 
     agenda = client.get("/assistant/agenda", headers={"Authorization": f"Bearer {intern}"})
     assert agenda.status_code == 200
@@ -472,6 +757,57 @@ def test_user_profile_roundtrip_and_assistant_personal_dates():
     calendar = client.get("/assistant/calendar", headers={"Authorization": f"Bearer {intern}"})
     assert calendar.status_code == 200
     assert any(item["kind"] == "personal_date" for item in calendar.json()["items"])
+
+
+def test_assistant_onboarding_state_and_chat_profile_capture(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace_root = Path(tmp) / "workspace"
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("LAWCOPILOT_DB_PATH", f"{tmp}/onboarding.db")
+        monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", f"{tmp}/audit.log.jsonl")
+        monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", f"{tmp}/events.log.jsonl")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_TYPE", "gemini")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_MODEL", "gemini-2.5-flash")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_API_KEY", "gemini-test-key")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_CONFIGURED", "true")
+
+        store = Persistence(Path(f"{tmp}/onboarding.db"))
+        store.save_workspace_root("default-office", "Kişisel Ofis", str(workspace_root), "workspace-hash")
+        settings = app_module.get_settings()
+        memory = MemoryService(store, settings.office_id)
+
+        initial_state = app_module._assistant_onboarding_state(settings, store)
+        assert initial_state["complete"] is False
+        assert initial_state["stage"] == "assistant"
+        assert "isim ver" in str(initial_state["next_question"]).lower()
+
+        persona_updates = memory.capture_chat_signal(
+            "Senin adın Ada olsun. Biraz daha şakacı ve sıcak ol. Rolün kişisel hukuk asistanı olsun."
+        )
+        assert any(item["kind"] == "assistant_persona_signal" for item in persona_updates)
+        runtime_body = store.get_assistant_runtime_profile(settings.office_id)
+        assert runtime_body["assistant_name"] == "Ada"
+        assert "Şakacı" in runtime_body["tone"]
+        assert "kişisel hukuk asistanı" in runtime_body["role_summary"]
+
+        user_updates = memory.capture_chat_signal(
+            "Bana Sami diye hitap et. En sevdiğim renk lacivert. "
+            "Bana kısa ve net cevap ver. Genelde tren tercih ederim. "
+            "Yeme içmede kahveyi severim. Seyahatte pencere kenarı koltuğu isterim. "
+            "Serin ve güneşli havayı severim."
+        )
+        assert any(item["kind"] == "profile_signal" for item in user_updates)
+        user_body = store.get_user_profile(settings.office_id)
+        assert user_body["display_name"] == "Sami"
+        assert user_body["favorite_color"] == "lacivert"
+        assert "tren" in user_body["transport_preference"].lower()
+        assert "kısa ve net" in user_body["communication_style"].lower()
+        assert "kahve" in user_body["food_preferences"].lower()
+
+        final_state = app_module._assistant_onboarding_state(settings, store)
+        assert final_state["complete"] is True
+        assert final_state["stage"] == "complete"
 
 
 def test_query_runtime_prompt_includes_user_profile(monkeypatch):
@@ -1542,6 +1878,143 @@ def test_assistant_thread_uses_runtime_when_available(monkeypatch):
     assert body["messages"][0]["source_context"]["source_refs"][0]["label"] == "bordro.pdf"
 
 
+def test_assistant_thread_lists_workspace_documents_when_asked(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-assistant-doc-inventory-")
+    workspace_root = Path(temp_root) / "workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    (workspace_root / "kira_ihtar.txt").write_text("Tahliye ve kira ihtarı notları", encoding="utf-8")
+    (workspace_root / "velayet_dilekcesi.md").write_text("Velayet dava hazırlık taslağı", encoding="utf-8")
+
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_GOOGLE_ENABLED", "true")
+    monkeypatch.setenv("LAWCOPILOT_GOOGLE_CONFIGURED", "true")
+    monkeypatch.setenv("LAWCOPILOT_DRIVE_CONNECTED", "true")
+    monkeypatch.setenv("LAWCOPILOT_GOOGLE_ACCOUNT_LABEL", "Sami Google")
+    monkeypatch.setenv("LAWCOPILOT_PROVIDER_CONFIGURED", "true")
+    monkeypatch.setenv("LAWCOPILOT_PROVIDER_TYPE", "openai")
+    monkeypatch.setenv("LAWCOPILOT_PROVIDER_MODEL", "gpt-4.1-mini")
+
+    scoped_client = TestClient(create_app())
+    lawyer = scoped_client.post("/auth/token", json={"subject": "workspace-owner", "role": "lawyer"}).json()["access_token"]
+    intern = scoped_client.post("/auth/token", json={"subject": "assistant-user", "role": "intern"}).json()["access_token"]
+
+    saved = scoped_client.put(
+        "/workspace",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"root_path": str(workspace_root), "display_name": "Belge Havuzu"},
+    )
+    assert saved.status_code == 200
+
+    scan = scoped_client.post(
+        "/workspace/scan",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"full_rescan": True},
+    )
+    assert scan.status_code == 200
+
+    runtime_profile = scoped_client.put(
+        "/assistant/runtime/profile",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "assistant_name": "LawCopilot",
+            "role_summary": "Kaynak dayanaklı hukuk çalışma asistanı",
+            "tone": "Net ve profesyonel",
+            "soul_notes": "Önce bağlamı topla, sonra öner.",
+        },
+    )
+    assert runtime_profile.status_code == 200
+
+    profile = scoped_client.put(
+        "/profile",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "display_name": "Sami",
+            "communication_style": "Kısa ve net konuş.",
+            "assistant_notes": "Belge envanterini erkenden görmek ister.",
+            "important_dates": [],
+        },
+    )
+    assert profile.status_code == 200
+
+    sync = scoped_client.post(
+        "/integrations/google/sync",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={
+            "account_label": "Sami Google",
+            "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+            "drive_files": [
+                {
+                    "provider": "google",
+                    "external_id": "drive-1",
+                    "name": "vekalet_taslagi.docx",
+                    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "web_view_link": "https://drive.google.com/file/d/drive-1/view",
+                    "modified_at": "2026-03-14T08:00:00Z",
+                }
+            ],
+        },
+    )
+    assert sync.status_code == 200
+
+    response = scoped_client.post(
+        "/assistant/thread/messages",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={"content": "Elimde hangi belgeler var şu anda?"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["generated_from"] == "assistant_document_inventory"
+    assert "kira_ihtar.txt" in body["message"]["content"]
+    assert "velayet_dilekcesi.md" in body["message"]["content"]
+    assert "vekalet_taslagi.docx" in body["message"]["content"]
+    assert any(item["tool"] == "documents" for item in body["message"]["source_context"]["executed_tools"])
+
+
+def test_google_drive_files_endpoint_lists_mirrored_items(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-google-drive-list-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_GOOGLE_ENABLED", "true")
+    monkeypatch.setenv("LAWCOPILOT_GOOGLE_CONFIGURED", "true")
+    monkeypatch.setenv("LAWCOPILOT_DRIVE_CONNECTED", "true")
+
+    scoped_client = TestClient(create_app())
+    intern = scoped_client.post("/auth/token", json={"subject": "drive-viewer", "role": "intern"}).json()["access_token"]
+
+    sync = scoped_client.post(
+        "/integrations/google/sync",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={
+            "account_label": "Sami Google",
+            "scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+            "drive_files": [
+                {
+                    "provider": "google",
+                    "external_id": "drive-2",
+                    "name": "durusma_notlari.pdf",
+                    "mime_type": "application/pdf",
+                    "web_view_link": "https://drive.google.com/file/d/drive-2/view",
+                    "modified_at": "2026-03-14T09:30:00Z",
+                }
+            ],
+        },
+    )
+    assert sync.status_code == 200
+
+    response = scoped_client.get(
+        "/integrations/google/drive-files",
+        headers={"Authorization": f"Bearer {intern}"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["generated_from"] == "google_drive_mirror"
+    assert body["connected"] is True
+    assert body["items"][0]["name"] == "durusma_notlari.pdf"
+
+
 def test_assistant_thread_can_confirm_calendar_event_from_chat(monkeypatch):
     scoped_client = _scoped_client_with_runtime(monkeypatch, _FakeRuntime())
     token = scoped_client.post("/auth/token", json={"subject": "assistant-calendar", "role": "intern"}).json()["access_token"]
@@ -1816,3 +2289,266 @@ def test_assistant_calendar_event_creation_is_visible_in_calendar(monkeypatch):
     assert calendar.status_code == 200
     items = calendar.json()["items"]
     assert any(item["title"] == "Müvekkil planlama görüşmesi" and item["provider"] == "lawcopilot-planner" for item in items)
+
+
+def test_whatsapp_and_x_sync_endpoints_update_status_and_inbox(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-social-sync-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+
+    scoped_client = TestClient(create_app())
+    intern = scoped_client.post("/auth/token", json={"subject": "connector-intern", "role": "intern"}).json()["access_token"]
+
+    initial_whatsapp = scoped_client.get("/integrations/whatsapp/status", headers={"Authorization": f"Bearer {intern}"})
+    assert initial_whatsapp.status_code == 200
+    assert initial_whatsapp.json()["configured"] is False
+
+    synced_whatsapp = scoped_client.post(
+        "/integrations/whatsapp/sync",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={
+            "account_label": "Büro WhatsApp",
+            "phone_number_id": "pnid-1",
+            "display_phone_number": "+90 555 000 00 00",
+            "verified_name": "LawCopilot Hukuk",
+            "messages": [
+                {
+                    "conversation_ref": "conv-1",
+                    "message_ref": "wamid-1",
+                    "sender": "+90 555 000 00 01",
+                    "recipient": "+90 555 000 00 00",
+                    "body": "Duruşma saati için dönüş bekliyorum.",
+                    "direction": "inbound",
+                    "reply_needed": True,
+                    "sent_at": "2026-03-14T10:00:00Z",
+                }
+            ],
+        },
+    )
+    assert synced_whatsapp.status_code == 200
+    assert synced_whatsapp.json()["synced"]["messages"] == 1
+
+    whatsapp_status = scoped_client.get("/integrations/whatsapp/status", headers={"Authorization": f"Bearer {intern}"})
+    assert whatsapp_status.status_code == 200
+    whatsapp_body = whatsapp_status.json()
+    assert whatsapp_body["configured"] is True
+    assert whatsapp_body["message_count"] == 1
+    assert whatsapp_body["account_label"] == "Büro WhatsApp"
+
+    synced_x = scoped_client.post(
+        "/integrations/x/sync",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={
+            "account_label": "@lawcopilot",
+            "user_id": "x-user-1",
+            "scopes": ["tweet.read", "tweet.write", "users.read"],
+            "mentions": [
+                {
+                    "external_id": "mention-1",
+                    "post_type": "mention",
+                    "author_handle": "@muvvekkil",
+                    "content": "Dosya güncellemesi paylaşır mısınız?",
+                    "posted_at": "2026-03-14T11:00:00Z",
+                    "reply_needed": True,
+                }
+            ],
+            "posts": [
+                {
+                    "external_id": "post-1",
+                    "post_type": "post",
+                    "author_handle": "@lawcopilot",
+                    "content": "Bugünkü hukuk notları",
+                    "posted_at": "2026-03-14T09:00:00Z",
+                    "reply_needed": False,
+                }
+            ],
+        },
+    )
+    assert synced_x.status_code == 200
+    assert synced_x.json()["synced"]["mentions"] == 1
+    assert synced_x.json()["synced"]["posts"] == 1
+
+    x_status = scoped_client.get("/integrations/x/status", headers={"Authorization": f"Bearer {intern}"})
+    assert x_status.status_code == 200
+    x_body = x_status.json()
+    assert x_body["configured"] is True
+    assert x_body["mention_count"] == 1
+    assert x_body["post_count"] == 1
+    assert x_body["account_label"] == "@lawcopilot"
+
+    inbox = scoped_client.get("/assistant/inbox", headers={"Authorization": f"Bearer {intern}"})
+    assert inbox.status_code == 200
+    items = inbox.json()["items"]
+    assert any(item["title"] == "Duruşma saati için dönüş bekliyorum." for item in items)
+    assert any("@muvvekkil" in str(item["title"]) for item in items)
+
+
+def test_assistant_thread_can_use_web_search_and_travel_tools(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-assistant-search-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+    monkeypatch.setattr(app_module, "is_web_search_query", lambda query: "ara" in query.lower())
+    monkeypatch.setattr(app_module, "is_travel_query", lambda query: "bilet" in query.lower() or "tren" in query.lower())
+    monkeypatch.setattr(app_module, "is_travel_booking_query", lambda query: "satın al" in query.lower() or "al " in query.lower())
+    monkeypatch.setattr(
+        app_module,
+        "build_web_search_context",
+        lambda query: {
+            "results": [
+                {
+                    "title": "Yargıtay karar özeti",
+                    "snippet": "Kira uyuşmazlığına dair güncel karar özeti.",
+                    "url": "https://example.test/karar",
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(
+        app_module,
+        "build_travel_context",
+        lambda query, profile_note=None: {
+            "results": [
+                {
+                    "title": "İstanbul - Ankara hızlı tren",
+                    "snippet": "08:45 çıkış, 12:30 varış, esnek bilet.",
+                    "url": "https://example.test/train",
+                }
+            ],
+            "booking_url": "https://example.test/book-train",
+        },
+    )
+
+    scoped_client = TestClient(create_app())
+    lawyer = scoped_client.post("/auth/token", json={"subject": "search-lawyer", "role": "lawyer"}).json()["access_token"]
+    intern = scoped_client.post("/auth/token", json={"subject": "search-intern", "role": "intern"}).json()["access_token"]
+
+    profile = scoped_client.put(
+        "/profile",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "display_name": "Sami",
+            "travel_preferences": "Denizi ve tren yolculuğunu sever.",
+            "important_dates": [],
+        },
+    )
+    assert profile.status_code == 200
+
+    web_reply = scoped_client.post(
+        "/assistant/thread/messages",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={"content": "Web'de kira artış kararlarını ara"},
+    )
+    assert web_reply.status_code == 200
+    web_body = web_reply.json()
+    assert web_body["generated_from"] == "assistant_web_search"
+    assert "Yargıtay karar özeti" in web_body["message"]["content"]
+    assert any(item["tool"] == "web-search" for item in web_body["message"]["source_context"]["executed_tools"])
+
+    travel_reply = scoped_client.post(
+        "/assistant/thread/messages",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={"content": "18 Mart için Ankara'ya tren bileti bak"},
+    )
+    assert travel_reply.status_code == 200
+    travel_body = travel_reply.json()
+    assert travel_body["generated_from"] == "assistant_travel_search"
+    assert "İstanbul - Ankara hızlı tren" in travel_body["message"]["content"]
+    assert any(item["tool"] == "travel" for item in travel_body["message"]["source_context"]["executed_tools"])
+
+    booking_reply = scoped_client.post(
+        "/assistant/thread/messages",
+        headers={"Authorization": f"Bearer {intern}"},
+        json={"content": "Bu seyahat için bileti satın al"},
+    )
+    assert booking_reply.status_code == 200
+    booking_body = booking_reply.json()
+    assert booking_body["generated_from"] == "assistant_actions"
+    assert booking_body["requires_approval"] is True
+    assert booking_body["draft_preview"]["channel"] == "travel"
+    assert any(
+        item.get("type") == "booking_url" and item.get("url") == "https://example.test/book-train"
+        for item in booking_body["message"]["source_context"]["source_refs"]
+    )
+
+
+def test_dispatch_report_endpoints_update_drafts_and_actions(monkeypatch):
+    temp_root = tempfile.mkdtemp(prefix="lawcopilot-dispatch-state-")
+    monkeypatch.setenv("LAWCOPILOT_DB_PATH", str(Path(temp_root) / "lawcopilot.db"))
+    monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", str(Path(temp_root) / "audit.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", str(Path(temp_root) / "events.log.jsonl"))
+    monkeypatch.setenv("LAWCOPILOT_CONNECTOR_DRY_RUN", "false")
+
+    scoped_client = TestClient(create_app())
+    lawyer = scoped_client.post("/auth/token", json={"subject": "dispatch-lawyer", "role": "lawyer"}).json()["access_token"]
+
+    generated = scoped_client.post(
+        "/assistant/actions/generate",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "action_type": "send_whatsapp_message",
+            "target_channel": "whatsapp",
+            "instructions": "Müvekkile yarınki görüşmeyi hatırlatan kısa mesaj hazırla.",
+            "to_contact": "+905550000001",
+        },
+    )
+    assert generated.status_code == 200
+    action_id = int(generated.json()["action"]["id"])
+    draft_id = int(generated.json()["draft"]["id"])
+
+    approved = scoped_client.post(
+        f"/assistant/actions/{action_id}/approve",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"note": "Gönderime hazırla."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["dispatch_mode"] == "ready_to_send"
+    assert approved.json()["draft"]["dispatch_state"] == "ready"
+
+    completed = scoped_client.post(
+        f"/assistant/drafts/{draft_id}/dispatch-complete",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "action_id": action_id,
+            "external_message_id": "wamid-42",
+            "note": "WhatsApp gönderimi tamamlandı.",
+        },
+    )
+    assert completed.status_code == 200
+    assert completed.json()["draft"]["dispatch_state"] == "completed"
+    assert completed.json()["draft"]["delivery_status"] == "sent"
+
+    drafts = scoped_client.get("/assistant/drafts", headers={"Authorization": f"Bearer {lawyer}"})
+    assert drafts.status_code == 200
+    synced_draft = next(item for item in drafts.json()["items"] if int(item["id"]) == draft_id)
+    assert synced_draft["dispatch_state"] == "completed"
+    assert synced_draft["external_message_id"] == "wamid-42"
+
+    generated_x = scoped_client.post(
+        "/assistant/actions/generate",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={
+            "action_type": "post_x_update",
+            "target_channel": "x",
+            "instructions": "Bugünkü dava gündemine dair kısa bir X gönderisi hazırla.",
+        },
+    )
+    assert generated_x.status_code == 200
+    x_action_id = int(generated_x.json()["action"]["id"])
+
+    approved_x = scoped_client.post(
+        f"/assistant/actions/{x_action_id}/approve",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"note": "Paylaşıma hazırla."},
+    )
+    assert approved_x.status_code == 200
+
+    failed = scoped_client.post(
+        f"/assistant/actions/{x_action_id}/dispatch-failed",
+        headers={"Authorization": f"Bearer {lawyer}"},
+        json={"error": "X API zaman aşımı"},
+    )
+    assert failed.status_code == 200
+    assert failed.json()["action"]["dispatch_state"] == "failed"
+    assert failed.json()["action"]["dispatch_error"] == "X API zaman aşımı"

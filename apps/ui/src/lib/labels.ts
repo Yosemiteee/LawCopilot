@@ -102,6 +102,29 @@ export function dosyaDurumuEtiketi(value?: string | null) {
   }
 }
 
+export function dosyaBasligiEtiketi(value?: string | null) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  switch (normalized) {
+    case "activity_matter":
+      return "Etkinlik dosyası";
+    case "task_recommendation_matter":
+      return "Görev öneri dosyası";
+    case "risk_workflow_matter":
+      return "Risk iş akışı dosyası";
+    case "chronology_matter":
+      return "Zaman çizelgesi dosyası";
+    case "chronology_issue_matter":
+      return "Zaman çizelgesi sorun dosyası";
+    case "workspace_bagli_dosya":
+      return "Çalışma alanına bağlı dosya";
+    default:
+      return value || "Dosya";
+  }
+}
+
 export function gorevDurumuEtiketi(value?: string | null) {
   switch ((value || "").toLowerCase()) {
     case "open":
@@ -190,6 +213,167 @@ export function runtimeDurumuEtiketi(value?: string | null) {
     default:
       return "Henüz çağrı yok";
   }
+}
+
+export function asistanAracEtiketi(provider?: string | null, fallbackLabel?: string | null) {
+  switch ((provider || "").toLowerCase()) {
+    case "gmail":
+      return "Gmail";
+    case "calendar":
+      return "Google Takvim";
+    case "drive":
+      return "Google Drive";
+    case "telegram":
+      return "Telegram";
+    case "whatsapp":
+      return "WhatsApp";
+    case "x":
+      return "X";
+    case "workspace":
+      return "Çalışma alanı";
+    case "web-search":
+      return "Web arama";
+    case "travel":
+      return "Seyahat ve bilet";
+    default:
+      return fallbackLabel || "Araç";
+  }
+}
+
+export function asistanAracDurumuEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "connected":
+      return "Bağlandı";
+    case "pending":
+      return "Bağlantı bekleniyor";
+    case "available":
+      return "Hazır";
+    case "planned":
+      return "Yakında";
+    case "missing":
+      return "Eksik";
+    case "valid":
+      return "Doğrulandı";
+    case "invalid":
+      return "Hatalı";
+    case "failed":
+      return "Başarısız";
+    default:
+      return value || "Belirsiz";
+  }
+}
+
+export function asistanAracYetenekEtiketi(value?: string | null) {
+  switch ((value || "").toLowerCase()) {
+    case "read_threads":
+      return "İleti dizilerini oku";
+    case "draft_reply":
+      return "Yanıt taslağı hazırla";
+    case "send_after_approval":
+      return "Onay sonrası gönder";
+    case "read_events":
+      return "Takvim kayıtlarını oku";
+    case "suggest_slots":
+      return "Uygun zaman öner";
+    case "create_after_approval":
+      return "Onay sonrası kayıt oluştur";
+    case "update_after_approval":
+      return "Onay sonrası kayıt güncelle";
+    case "list_files":
+      return "Dosyaları listele";
+    case "fetch_context":
+      return "Bağlam topla";
+    case "bind_reference":
+      return "Belge bağlantısı kur";
+    case "read_messages":
+      return "Mesajları oku";
+    case "mentions_read":
+      return "Mention ve yanıtları oku";
+    case "draft_post":
+      return "Gönderi taslağı hazırla";
+    case "search":
+      return "Ara";
+    case "summarize":
+      return "Özet çıkar";
+    case "similarity":
+      return "Benzerlik bul";
+    case "matter_linking":
+      return "Dosyaya bağla";
+    case "current_research":
+      return "Güncel araştırma yap";
+    case "recommendation_support":
+      return "Öneri desteği ver";
+    case "schedule_after_approval":
+      return "Onay sonrası zamanla";
+    case "compare":
+      return "Karşılaştır";
+    case "prepare_reservation":
+      return "Rezervasyon hazırlığı yap";
+    default:
+      return value || "Yetkinlik";
+  }
+}
+
+export function asistanAracKapsamEtiketi(value?: string | null) {
+  const normalized = String(value || "").toLowerCase();
+  if (!normalized) {
+    return "Ek yetki";
+  }
+  if (normalized === "messages:read") {
+    return "Mesajları okuma";
+  }
+  if (normalized === "messages:send") {
+    return "Mesaj gönderme";
+  }
+  if (normalized.includes("gmail.send")) {
+    return "Gmail gönderme";
+  }
+  if (normalized.includes("gmail.readonly")) {
+    return "Gmail okuma";
+  }
+  if (normalized.includes("gmail")) {
+    return "Gmail erişimi";
+  }
+  if (normalized.includes("calendar.events")) {
+    return "Takvim yazma";
+  }
+  if (normalized.includes("calendar.readonly")) {
+    return "Takvim okuma";
+  }
+  if (normalized.includes("calendar")) {
+    return "Takvim erişimi";
+  }
+  if (normalized.includes("drive.readonly")) {
+    return "Drive okuma";
+  }
+  if (normalized.includes("drive.file")) {
+    return "Drive dosya erişimi";
+  }
+  if (normalized.includes("drive")) {
+    return "Drive erişimi";
+  }
+  if (normalized === "tweet.read") {
+    return "X gönderilerini okuma";
+  }
+  if (normalized === "tweet.write") {
+    return "X gönderisi paylaşma";
+  }
+  if (normalized === "users.read") {
+    return "X hesap bilgisini okuma";
+  }
+  if (normalized === "follows.read") {
+    return "X bağlantılarını okuma";
+  }
+  if (normalized === "offline.access") {
+    return "Bağlantıyı yenileme";
+  }
+  if (normalized === "dm.read") {
+    return "X doğrudan mesajlarını okuma";
+  }
+  if (normalized === "dm.write") {
+    return "X doğrudan mesaj gönderme";
+  }
+  return "Ek yetki";
 }
 
 export function olayTipiEtiketi(value?: string | null) {
@@ -339,6 +523,12 @@ export function kanalEtiketi(value?: string | null) {
       return "E-posta";
     case "telegram":
       return "Telegram";
+    case "whatsapp":
+      return "WhatsApp";
+    case "x":
+      return "X";
+    case "travel":
+      return "Seyahat";
     case "client_portal":
       return "Müvekkil portalı";
     default:
@@ -375,6 +565,12 @@ export function asistanAksiyonTipiEtiketi(value?: string | null) {
       return "E-posta yanıtı";
     case "send_telegram_message":
       return "Telegram yanıtı";
+    case "send_whatsapp_message":
+      return "WhatsApp mesajı";
+    case "post_x_update":
+      return "X gönderisi";
+    case "reserve_travel_ticket":
+      return "Seyahat rezervasyonu";
     case "create_task":
       return "Görev önerisi";
     default:
@@ -400,6 +596,9 @@ export function asistanAksiyonDurumuEtiketi(value?: string | null) {
 export function disIletisimDurumuEtiketi(approvalStatus?: string | null, deliveryStatus?: string | null) {
   if ((deliveryStatus || "").toLowerCase() === "sent") {
     return "Gönderildi";
+  }
+  if ((deliveryStatus || "").toLowerCase() === "failed") {
+    return "Gönderim hatası";
   }
   if ((deliveryStatus || "").toLowerCase() === "ready_to_send") {
     return "Gönderime hazır";

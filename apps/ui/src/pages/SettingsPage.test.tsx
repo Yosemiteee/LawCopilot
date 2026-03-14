@@ -77,6 +77,7 @@ describe("SettingsPage", () => {
       "GET /profile": {
         office_id: "default-office",
         display_name: "Sami",
+        favorite_color: "Mavi",
         food_preferences: "Burger King tercih eder.",
         transport_preference: "Tren",
         weather_preference: "Serin hava",
@@ -84,6 +85,7 @@ describe("SettingsPage", () => {
         communication_style: "",
         assistant_notes: "",
         important_dates: [],
+        related_profiles: [],
         created_at: null,
         updated_at: null,
       },
@@ -98,6 +100,30 @@ describe("SettingsPage", () => {
         heartbeat_extra_checks: [],
         created_at: null,
         updated_at: null,
+      },
+      "GET /assistant/onboarding/state": {
+        complete: false,
+        workspace_ready: true,
+        provider_ready: true,
+        model_ready: true,
+        assistant_ready: false,
+        user_ready: true,
+        summary: "Persona ve kullanıcı profili sohbetle tamamlanacak.",
+        next_question: "Ben nasıl bir asistan olayım?",
+        interview_intro: "Asistan ilk açılışta kendi kimliğini ve sizi tanımak için soruları tek tek sorar.",
+        interview_topics: [
+          "Asistanın adı, tonu ve çalışma tarzı",
+          "Size nasıl hitap edeceği",
+        ],
+        suggested_prompts: [
+          "Sen kimsin ve bana nasıl yardımcı olacaksın?",
+          "Ben kimim, hakkımda neleri bilmek istiyorsun?",
+        ],
+        profile: {
+          display_name: "Sami",
+          favorite_color: "Mavi",
+          transport_preference: "Tren",
+        },
       },
       "GET /assistant/runtime/workspace": {
         enabled: true,
@@ -124,24 +150,69 @@ describe("SettingsPage", () => {
         ],
         daily_log_path: "/tmp/openclaw-state/workspace/memory/daily-logs/2026-03-11.md",
       },
+      "GET /assistant/tools/status": {
+        items: [
+          {
+            provider: "gmail",
+            account_label: "Google Mail",
+            connected: false,
+            status: "pending",
+            scopes: [],
+            capabilities: ["read_threads", "draft_reply", "send_after_approval"],
+            write_enabled: true,
+            approval_required: true,
+            connected_account: null,
+          },
+          {
+            provider: "workspace",
+            account_label: "case_samples",
+            connected: true,
+            status: "connected",
+            scopes: [],
+            capabilities: ["search", "summarize", "similarity", "matter_linking"],
+            write_enabled: false,
+            approval_required: false,
+            connected_account: null,
+          },
+        ],
+        generated_from: "connector_registry",
+      },
       "PUT /profile": (_input: RequestInfo | URL, init?: RequestInit) => {
         savedBody = String(init?.body || "");
         return {
           profile: {
             office_id: "default-office",
             display_name: "Sami",
-            food_preferences: "",
-            transport_preference: "",
-            weather_preference: "",
+            favorite_color: "Mavi",
+            food_preferences: "Burger King tercih eder.",
+            transport_preference: "Tren",
+            weather_preference: "Serin hava",
             travel_preferences: "",
-            communication_style: "",
-            assistant_notes: "Duruşma günleri kısa özet isterim. Ankara seyahatlerinde tren önersin.",
-            important_dates: [],
-            created_at: null,
-            updated_at: "2026-03-11T00:00:00Z",
-          },
-          message: "Kişisel profil kaydedildi.",
-        };
+          communication_style: "",
+          assistant_notes: "Duruşma günleri kısa özet isterim. Ankara seyahatlerinde tren önersin.",
+          important_dates: [],
+          related_profiles: [
+            {
+              id: "related-1",
+              name: "Ece",
+              relationship: "Eşi",
+              preferences: "Deniz kenarı ve sakin planları sever.",
+              notes: "Özel günleri önceden planla.",
+              important_dates: [
+                {
+                  label: "Yıldönümü",
+                  date: "2026-05-18",
+                  recurring_annually: true,
+                  notes: "Mesaj taslağı ve rezervasyon notu çıkar.",
+                },
+              ],
+            },
+          ],
+          created_at: null,
+          updated_at: "2026-03-11T00:00:00Z",
+        },
+        message: "Kişisel profil kaydedildi.",
+      };
       },
       "PUT /assistant/runtime/profile": (_input: RequestInfo | URL, init?: RequestInit) => {
         runtimeSavedBody = String(init?.body || "");
@@ -194,9 +265,41 @@ describe("SettingsPage", () => {
         workspaceRootName: "case_samples",
         themeMode: "dark",
       },
+      desktop: {
+        getRuntimeInfo: async () => ({}),
+        getStoredConfig: async () => ({}),
+        getWorkspaceConfig: async () => ({}),
+        getIntegrationConfig: async () => ({
+          provider: {
+            type: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            model: "gpt-4.1-mini",
+            validationStatus: "pending",
+          },
+          google: {
+            enabled: false,
+            oauthConnected: false,
+            validationStatus: "pending",
+            clientIdConfigured: false,
+          },
+          telegram: {
+            enabled: false,
+            validationStatus: "pending",
+          },
+        }),
+        getGoogleAuthStatus: async () => ({
+          configured: false,
+          clientReady: false,
+          scopes: [],
+        }),
+      },
     });
 
     await waitFor(() => expect(screen.getAllByText(/Kişisel profil/i).length).toBeGreaterThan(0));
+    expect(screen.queryByRole("button", { name: "Ayarları Kapat" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Asistana dön" })).toBeInTheDocument();
+    expect(screen.getByText("İlk kurulum görünürlüğü")).toBeInTheDocument();
+    expect(screen.getByText("Asistan ilk açılışta kendi kimliğini ve sizi tanımak için soruları tek tek sorar.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Arayüz & Tema"));
     await waitFor(() => expect(screen.getAllByText("Arayüz görünümü").length).toBeGreaterThan(0));
@@ -208,12 +311,36 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Kendiniz ve tercihlerinizi anlatın"), {
       target: { value: "Duruşma günleri kısa özet isterim. Ankara seyahatlerinde tren önersin." },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Profil ekle" }));
+    fireEvent.change(screen.getByLabelText("İsim"), {
+      target: { value: "Ece" },
+    });
+    fireEvent.change(screen.getByLabelText("Yakınlık / ilişki"), {
+      target: { value: "Eşi" },
+    });
+    fireEvent.change(screen.getByLabelText("Tercihler ve sevdikleri"), {
+      target: { value: "Deniz kenarı ve sakin planları sever." },
+    });
+    fireEvent.change(screen.getByLabelText("Notlar"), {
+      target: { value: "Özel günleri önceden planla." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tarih ekle" }));
+    fireEvent.change(screen.getByLabelText("Başlık"), {
+      target: { value: "Yıldönümü" },
+    });
+    fireEvent.change(screen.getByLabelText("Tarih"), {
+      target: { value: "2026-05-18" },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Profili kaydet" }));
 
     await waitFor(() => expect(screen.getByText("Kişisel profil kaydedildi.")).toBeInTheDocument());
     expect(savedBody).toContain("Duruşma günleri kısa özet isterim.");
+    expect(savedBody).toContain("\"favorite_color\":\"Mavi\"");
+    expect(savedBody).toContain("\"transport_preference\":\"Tren\"");
     expect(savedBody).toContain("\"important_dates\":[]");
+    expect(savedBody).toContain("\"related_profiles\":[");
+    expect(savedBody).toContain("\"name\":\"Ece\"");
 
     await waitFor(() => expect(screen.getByLabelText("Asistan adı")).toBeInTheDocument());
 
@@ -233,7 +360,18 @@ describe("SettingsPage", () => {
     expect(runtimeSavedBody).toContain("Kaynak dayanaklı ilerle.");
     expect(runtimeSavedBody).toContain("Açık onay bekleyen taslakları sabah kontrol et.");
     
-    fireEvent.click(screen.getByRole("button", { name: /İlk kurulum/i }));
-    await waitFor(() => expect(screen.getByText("Ajan çalışma alanı")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Bağlantılar" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Kurulum" }));
+    await waitFor(() => expect(screen.getByText("Hesaplarını bağla")).toBeInTheDocument());
+    expect(screen.getByText("Google hesabı")).toBeInTheDocument();
+    expect(screen.getByText("Telegram")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Google hesabını bağla" })).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kurulum metni")).toBeInTheDocument();
+    expect(screen.getByLabelText("WhatsApp hat kimliği")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "WhatsApp'ı kaydet" })).toBeInTheDocument();
+    expect(screen.getByText("X hesabı")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "X hesabını bağla" })).toBeInTheDocument();
   });
 });

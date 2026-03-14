@@ -15,7 +15,7 @@ import {
 } from "../lib/labels";
 import { sozluk } from "../i18n";
 import {
-  getAssistantToolsStatus,
+  getAssistantOnboardingState,
   getAssistantRuntimeProfile,
   getAssistantRuntimeWorkspace,
   getHealth,
@@ -27,11 +27,13 @@ import {
   saveUserProfile,
 } from "../services/lawcopilotApi";
 import type {
+  AssistantOnboardingState,
   AssistantRuntimeProfile,
   AssistantRuntimeWorkspaceStatus,
-  AssistantToolStatus,
   Health,
   ModelProfilesResponse,
+  ProfileImportantDate,
+  RelatedProfile,
   TelemetryHealth,
   UserProfile,
   WorkspaceOverviewResponse,
@@ -46,15 +48,17 @@ function appendLegacyLine(lines: string[], label: string, value: string | null |
 
 function buildProfileNarrative(profile?: Partial<UserProfile> | null) {
   const explicit = String(profile?.assistant_notes || "").trim();
-  if (explicit) {
-    return explicit;
-  }
   const lines: string[] = [];
-  appendLegacyLine(lines, "Ulaşım tercihi", profile?.transport_preference);
-  appendLegacyLine(lines, "Hava tercihi", profile?.weather_preference);
-  appendLegacyLine(lines, "İletişim stili", profile?.communication_style);
-  appendLegacyLine(lines, "Yeme içme tercihleri", profile?.food_preferences);
-  appendLegacyLine(lines, "Seyahat notları", profile?.travel_preferences);
+  if (explicit) {
+    lines.push(explicit);
+  } else {
+    appendLegacyLine(lines, "Sevdiği renk", profile?.favorite_color);
+    appendLegacyLine(lines, "Ulaşım tercihi", profile?.transport_preference);
+    appendLegacyLine(lines, "Hava tercihi", profile?.weather_preference);
+    appendLegacyLine(lines, "İletişim stili", profile?.communication_style);
+    appendLegacyLine(lines, "Yeme içme tercihleri", profile?.food_preferences);
+    appendLegacyLine(lines, "Seyahat notları", profile?.travel_preferences);
+  }
   for (const item of profile?.important_dates || []) {
     const label = String(item.label || "").trim();
     const date = String(item.date || "").trim();
@@ -63,6 +67,30 @@ function buildProfileNarrative(profile?: Partial<UserProfile> | null) {
       lines.push(
         `Önemli tarih: ${label || "Plan"}${date ? ` (${date})` : ""}${notes ? ` - ${notes}` : ""}`,
       );
+    }
+  }
+  for (const item of profile?.related_profiles || []) {
+    const name = String(item.name || "").trim();
+    if (!name) {
+      continue;
+    }
+    const relationship = String(item.relationship || "").trim();
+    const notes = String(item.notes || "").trim();
+    const preferences = String(item.preferences || "").trim();
+    lines.push(`Yakın çevre profili: ${name}${relationship ? ` (${relationship})` : ""}`);
+    if (preferences) {
+      lines.push(`- Tercihler: ${preferences}`);
+    }
+    if (notes) {
+      lines.push(`- Notlar: ${notes}`);
+    }
+    for (const dateItem of item.important_dates || []) {
+      const label = String(dateItem.label || "").trim();
+      const date = String(dateItem.date || "").trim();
+      const note = String(dateItem.notes || "").trim();
+      if (label || date || note) {
+        lines.push(`- ${name} için tarih: ${label || "Plan"}${date ? ` (${date})` : ""}${note ? ` - ${note}` : ""}`);
+      }
     }
   }
   return lines.join("\n");
@@ -106,6 +134,7 @@ function createEmptyProfile(officeId: string): UserProfile {
   return {
     office_id: officeId,
     display_name: "",
+    favorite_color: "",
     food_preferences: "",
     transport_preference: "",
     weather_preference: "",
@@ -113,8 +142,31 @@ function createEmptyProfile(officeId: string): UserProfile {
     communication_style: "",
     assistant_notes: "",
     important_dates: [],
+    related_profiles: [],
     created_at: null,
     updated_at: null,
+  };
+}
+
+function createEmptyImportantDate(): ProfileImportantDate {
+  return {
+    label: "",
+    date: "",
+    recurring_annually: true,
+    notes: "",
+    next_occurrence: null,
+    days_until: null,
+  };
+}
+
+function createEmptyRelatedProfile(): RelatedProfile {
+  return {
+    id: `related-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: "",
+    relationship: "",
+    preferences: "",
+    notes: "",
+    important_dates: [],
   };
 }
 
@@ -132,6 +184,25 @@ function normalizeProfile(officeId: string, profile?: Partial<UserProfile> | nul
         notes: item.notes || "",
         next_occurrence: item.next_occurrence || null,
         days_until: typeof item.days_until === "number" ? item.days_until : null,
+      }))
+      : [],
+    related_profiles: Array.isArray(profile?.related_profiles)
+      ? profile!.related_profiles.map((item, index) => ({
+        id: String(item.id || `related-${index + 1}`),
+        name: String(item.name || ""),
+        relationship: String(item.relationship || ""),
+        preferences: String(item.preferences || ""),
+        notes: String(item.notes || ""),
+        important_dates: Array.isArray(item.important_dates)
+          ? item.important_dates.map((dateItem) => ({
+            label: String(dateItem.label || ""),
+            date: String(dateItem.date || ""),
+            recurring_annually: dateItem.recurring_annually !== false,
+            notes: dateItem.notes || "",
+            next_occurrence: dateItem.next_occurrence || null,
+            days_until: typeof dateItem.days_until === "number" ? dateItem.days_until : null,
+          }))
+          : [],
       }))
       : [],
   };
@@ -168,7 +239,7 @@ function normalizeAssistantRuntimeProfile(officeId: string, profile?: Partial<As
 export function SettingsPage() {
   const { settings, setSettings, setWorkspace, setCurrentMatter } = useAppContext();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "workspace" | "integrations" | "system">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "workspace" | "system">("profile");
   const [profiles, setProfiles] = useState<ModelProfilesResponse | null>(null);
   const [health, setHealth] = useState<TelemetryHealth | null>(null);
   const [workspace, setWorkspaceOverview] = useState<WorkspaceOverviewResponse | null>(null);
@@ -176,7 +247,7 @@ export function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile>(createEmptyProfile(settings.officeId));
   const [assistantRuntimeProfile, setAssistantRuntimeProfile] = useState<AssistantRuntimeProfile>(createEmptyAssistantRuntimeProfile(settings.officeId));
   const [assistantRuntimeWorkspace, setAssistantRuntimeWorkspace] = useState<AssistantRuntimeWorkspaceStatus | null>(null);
-  const [assistantToolsStatus, setAssistantToolsStatus] = useState<AssistantToolStatus[]>([]);
+  const [onboarding, setOnboarding] = useState<AssistantOnboardingState | null>(null);
   const [error, setError] = useState("");
   const [desktopConfigSaved, setDesktopConfigSaved] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
@@ -186,7 +257,7 @@ export function SettingsPage() {
   const desktopReady = Boolean(window.lawcopilotDesktop);
 
   async function refreshSettingsSurface() {
-    const [healthResponse, profileResponse, telemetryResponse, workspaceResponse, userProfileResponse, runtimeProfileResponse, runtimeWorkspaceResponse, toolsStatusResponse] = await Promise.all([
+    const [healthResponse, profileResponse, telemetryResponse, workspaceResponse, userProfileResponse, runtimeProfileResponse, runtimeWorkspaceResponse, onboardingResponse] = await Promise.all([
       getHealth(settings),
       getModelProfiles(settings),
       getTelemetryHealth(settings),
@@ -194,7 +265,7 @@ export function SettingsPage() {
       getUserProfile(settings),
       getAssistantRuntimeProfile(settings).catch(() => createEmptyAssistantRuntimeProfile(settings.officeId)),
       getAssistantRuntimeWorkspace(settings).catch(() => null),
-      getAssistantToolsStatus(settings).catch(() => ({ items: [], generated_from: "connector_registry" })),
+      getAssistantOnboardingState(settings).catch(() => null),
     ]);
 
     setConnectionHealth(healthResponse);
@@ -204,7 +275,7 @@ export function SettingsPage() {
     setProfile(normalizeProfile(healthResponse.office_id, userProfileResponse));
     setAssistantRuntimeProfile(normalizeAssistantRuntimeProfile(healthResponse.office_id, runtimeProfileResponse));
     setAssistantRuntimeWorkspace(runtimeWorkspaceResponse);
-    setAssistantToolsStatus(toolsStatusResponse.items || []);
+    setOnboarding(onboardingResponse);
     setSettings({
       deploymentMode: healthResponse.deployment_mode,
       officeId: healthResponse.office_id,
@@ -294,6 +365,95 @@ export function SettingsPage() {
     setProfileMessage("");
   }
 
+  function addImportantDate() {
+    setProfile((current) => ({
+      ...current,
+      important_dates: [...current.important_dates, createEmptyImportantDate()],
+    }));
+    setProfileMessage("");
+  }
+
+  function updateImportantDate(index: number, patch: Partial<ProfileImportantDate>) {
+    setProfile((current) => ({
+      ...current,
+      important_dates: current.important_dates.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, ...patch } : item
+      )),
+    }));
+    setProfileMessage("");
+  }
+
+  function removeImportantDate(index: number) {
+    setProfile((current) => ({
+      ...current,
+      important_dates: current.important_dates.filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setProfileMessage("");
+  }
+
+  function addRelatedProfile() {
+    setProfile((current) => ({ ...current, related_profiles: [...current.related_profiles, createEmptyRelatedProfile()] }));
+    setProfileMessage("");
+  }
+
+  function removeRelatedProfile(index: number) {
+    setProfile((current) => ({
+      ...current,
+      related_profiles: current.related_profiles.filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setProfileMessage("");
+  }
+
+  function updateRelatedProfileField(index: number, field: "name" | "relationship" | "preferences" | "notes", value: string) {
+    setProfile((current) => ({
+      ...current,
+      related_profiles: current.related_profiles.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [field]: value } : item
+      )),
+    }));
+    setProfileMessage("");
+  }
+
+  function addRelatedProfileImportantDate(index: number) {
+    setProfile((current) => ({
+      ...current,
+      related_profiles: current.related_profiles.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, important_dates: [...item.important_dates, createEmptyImportantDate()] } : item
+      )),
+    }));
+    setProfileMessage("");
+  }
+
+  function updateRelatedProfileImportantDate(index: number, dateIndex: number, patch: Partial<ProfileImportantDate>) {
+    setProfile((current) => ({
+      ...current,
+      related_profiles: current.related_profiles.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
+        return {
+          ...item,
+          important_dates: item.important_dates.map((dateItem, currentDateIndex) => (
+            currentDateIndex === dateIndex ? { ...dateItem, ...patch } : dateItem
+          )),
+        };
+      }),
+    }));
+    setProfileMessage("");
+  }
+
+  function removeRelatedProfileImportantDate(index: number, dateIndex: number) {
+    setProfile((current) => ({
+      ...current,
+      related_profiles: current.related_profiles.map((item, itemIndex) => (
+        itemIndex === index
+          ? { ...item, important_dates: item.important_dates.filter((_, currentDateIndex) => currentDateIndex !== dateIndex) }
+          : item
+      )),
+    }));
+    setProfileMessage("");
+  }
+
   function updateAssistantRuntimeField(field: keyof AssistantRuntimeProfile, value: string) {
     setAssistantRuntimeProfile((current) => ({ ...current, [field]: value }));
     setAssistantRuntimeMessage("");
@@ -304,17 +464,41 @@ export function SettingsPage() {
     try {
       const response = await saveUserProfile(settings, {
         display_name: profile.display_name,
-        food_preferences: "",
-        transport_preference: "",
-        weather_preference: "",
-        travel_preferences: "",
-        communication_style: "",
+        favorite_color: profile.favorite_color,
+        food_preferences: profile.food_preferences,
+        transport_preference: profile.transport_preference,
+        weather_preference: profile.weather_preference,
+        travel_preferences: profile.travel_preferences,
+        communication_style: profile.communication_style,
         assistant_notes: profile.assistant_notes.trim(),
-        important_dates: [],
+        important_dates: profile.important_dates.map((item) => ({
+          label: item.label,
+          date: item.date,
+          recurring_annually: item.recurring_annually,
+          notes: item.notes ?? undefined,
+        })),
+        related_profiles: profile.related_profiles
+          .filter((item) => item.name.trim())
+          .map((item) => ({
+            id: item.id || undefined,
+            name: item.name.trim(),
+            relationship: item.relationship.trim() || undefined,
+            preferences: item.preferences.trim() || undefined,
+            notes: item.notes.trim() || undefined,
+            important_dates: item.important_dates
+              .filter((dateItem) => dateItem.label.trim() && dateItem.date.trim())
+              .map((dateItem) => ({
+                label: dateItem.label.trim() || "Önemli tarih",
+                date: dateItem.date,
+                recurring_annually: dateItem.recurring_annually,
+                notes: dateItem.notes ?? undefined,
+              })),
+          })),
       });
       setProfile(normalizeProfile(settings.officeId, response.profile));
       const runtimeWorkspace = await getAssistantRuntimeWorkspace(settings).catch(() => null);
       setAssistantRuntimeWorkspace(runtimeWorkspace);
+      setOnboarding(await getAssistantOnboardingState(settings).catch(() => null));
       setProfileMessage(response.message);
       setError("");
     } catch (err) {
@@ -338,6 +522,7 @@ export function SettingsPage() {
       });
       setAssistantRuntimeProfile(normalizeAssistantRuntimeProfile(settings.officeId, response.profile));
       setAssistantRuntimeWorkspace(response.workspace);
+      setOnboarding(await getAssistantOnboardingState(settings).catch(() => null));
       setAssistantRuntimeMessage(response.message);
       setError("");
     } catch (err) {
@@ -380,18 +565,45 @@ export function SettingsPage() {
     settings.selectedModelProfile,
   ]);
 
+  const onboardingChecklist = [
+    {
+      id: "workspace",
+      title: "Çalışma klasörü",
+      complete: Boolean(onboarding?.workspace_ready ?? health?.workspace_configured),
+    },
+    {
+      id: "provider",
+      title: "Sağlayıcı",
+      complete: Boolean(onboarding?.provider_ready ?? health?.provider_configured),
+    },
+    {
+      id: "model",
+      title: "Model",
+      complete: Boolean(onboarding?.model_ready ?? onboarding?.provider_model ?? health?.provider_model),
+    },
+    {
+      id: "assistant",
+      title: "Asistan kimliği",
+      complete: Boolean(onboarding?.assistant_ready ?? Boolean(assistantRuntimeProfile.assistant_name || assistantRuntimeProfile.soul_notes)),
+    },
+    {
+      id: "user",
+      title: "Kullanıcı profili",
+      complete: Boolean(onboarding?.user_ready ?? Boolean(profile.display_name || profile.assistant_notes)),
+    },
+  ];
+
+  const visibleProfileFacts = [
+    { label: sozluk.settings.profileFavoriteColor, value: profile.favorite_color },
+    { label: sozluk.settings.profileTransport, value: profile.transport_preference },
+    { label: sozluk.settings.profileWeather, value: profile.weather_preference },
+    { label: sozluk.settings.profileCommunicationStyle, value: profile.communication_style },
+    { label: sozluk.settings.profileFoodPreferences, value: profile.food_preferences },
+    { label: sozluk.settings.profileTravelPreferences, value: profile.travel_preferences },
+  ].filter((item) => String(item.value || "").trim());
+
   return (
     <div className="settings-surface">
-      <div className="toolbar settings-surface__header" style={{ padding: "0.5rem 0 1.5rem", borderBottom: "1px solid var(--line-soft)", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: 0, fontFamily: "var(--font-heading)", fontSize: "1.8rem" }}>{sozluk.navigation.find((n) => n.to === "/settings")?.label || "Ayarlar"}</h1>
-          <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)" }}>Sistem ve kişisel tercihlerinizi yapılandırın.</p>
-        </div>
-        <button className="button button--secondary" type="button" onClick={() => navigate("/assistant")}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "0.5rem" }}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          Ayarları Kapat
-        </button>
-      </div>
       <div className="page-grid page-grid--settings settings-layout">
         {/* Sidebar Tabs */}
         <div className="tabs tabs--vertical settings-layout__sidebar">
@@ -412,12 +624,6 @@ export function SettingsPage() {
             onClick={() => setActiveTab("workspace")}
           >
             {sozluk.settings.setupTitle}
-          </button>
-          <button
-            className={`tab ${activeTab === "integrations" ? "tab--active" : ""}`}
-            onClick={() => setActiveTab("integrations")}
-          >
-            Bağlantılar
           </button>
           <button
             className={`tab ${activeTab === "system" ? "tab--active" : ""}`}
@@ -472,6 +678,7 @@ export function SettingsPage() {
 
       {activeTab === "workspace" && (
         <div className="stack">
+        <div id="workspace-setup-card" style={{ scrollMarginTop: "1rem" }}>
         <SectionCard
           title={sozluk.settings.setupTitle}
         subtitle={sozluk.settings.setupSubtitle}
@@ -555,6 +762,20 @@ export function SettingsPage() {
           </div>
         </div>
       </SectionCard>
+      </div>
+
+      <SectionCard
+        title={sozluk.settings.setupConnectionsTitle}
+        subtitle={sozluk.settings.setupConnectionsSubtitle}
+      >
+        <div className="stack">
+          <div className="callout callout--accent">
+            <strong>{sozluk.settings.setupConnectionsCalloutTitle}</strong>
+            <p style={{ marginBottom: 0 }}>{sozluk.settings.setupConnectionsCalloutDescription}</p>
+          </div>
+          <IntegrationSetupPanel mode="simple" onUpdated={() => void refreshSettingsSurface()} />
+        </div>
+      </SectionCard>
 
       <details className="list-item">
         <summary style={{ cursor: "pointer", fontWeight: 600 }}>
@@ -623,6 +844,47 @@ export function SettingsPage() {
       {activeTab === "profile" && (
         <div className="stack">
       <SectionCard
+        title="İlk kurulum görünürlüğü"
+        subtitle="İlk kurulumun ve kişisel asistan sohbetinin hangi parçasının hazır olduğu burada görünür."
+        actions={
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button className="button button--secondary" type="button" onClick={() => navigate("/onboarding")}>
+              Kurulumu aç
+            </button>
+            <button className="button" type="button" onClick={() => navigate("/assistant")}>
+              Sohbeti başlat
+            </button>
+          </div>
+        }
+      >
+        <div className="stack">
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {onboardingChecklist.map((item) => (
+              <StatusBadge key={item.id} tone={item.complete ? "accent" : "warning"}>
+                {item.title}
+              </StatusBadge>
+            ))}
+          </div>
+          {onboarding?.summary ? <p style={{ marginBottom: 0 }}>{onboarding.summary}</p> : null}
+          {onboarding?.next_question ? (
+            <div className="callout callout--accent">
+              <strong>Tanışma röportajı</strong>
+              <p style={{ marginBottom: 0 }}>
+                {onboarding.interview_intro || "Asistan ilk açılışta önce kendi kimliğini, sonra seni ve kişisel tercihlerini sorar."}
+              </p>
+            </div>
+          ) : null}
+          {onboarding?.interview_topics?.length ? (
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {onboarding.interview_topics.map((item) => (
+                <StatusBadge key={item}>{item}</StatusBadge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard
         title={sozluk.settings.personalProfileTitle}
         subtitle={sozluk.settings.personalProfileSubtitle}
         actions={
@@ -640,6 +902,30 @@ export function SettingsPage() {
             <span>{sozluk.settings.profileDisplayName}</span>
             <input className="input" value={profile.display_name} onChange={(event) => updateProfileField("display_name", event.target.value)} />
           </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.profileFavoriteColor}</span>
+            <input className="input" value={profile.favorite_color} onChange={(event) => updateProfileField("favorite_color", event.target.value)} />
+          </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.profileTransport}</span>
+            <input className="input" value={profile.transport_preference} onChange={(event) => updateProfileField("transport_preference", event.target.value)} />
+          </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.profileCommunicationStyle}</span>
+            <input className="input" value={profile.communication_style} onChange={(event) => updateProfileField("communication_style", event.target.value)} />
+          </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.profileFoodPreferences}</span>
+            <input className="input" value={profile.food_preferences} onChange={(event) => updateProfileField("food_preferences", event.target.value)} />
+          </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.profileTravelPreferences}</span>
+            <input className="input" value={profile.travel_preferences} onChange={(event) => updateProfileField("travel_preferences", event.target.value)} />
+          </label>
+          <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+            <span>{sozluk.settings.profileWeather}</span>
+            <input className="input" value={profile.weather_preference} onChange={(event) => updateProfileField("weather_preference", event.target.value)} />
+          </label>
           <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
             <span>{sozluk.settings.profileAssistantNotes}</span>
             <textarea
@@ -651,6 +937,221 @@ export function SettingsPage() {
             />
           </label>
         </div>
+        <SectionCard
+          title={sozluk.settings.profileRelatedProfilesTitle}
+          subtitle={sozluk.settings.profileRelatedProfilesSubtitle}
+          actions={(
+            <button className="button button--secondary" type="button" onClick={addRelatedProfile}>
+              {sozluk.settings.profileRelatedProfileAdd}
+            </button>
+          )}
+        >
+          <div className="callout callout--accent">
+            <strong>{sozluk.settings.profileRelatedProfilesTitle}</strong>
+            <p style={{ marginBottom: 0 }}>{sozluk.settings.profileRelatedProfilesDescription}</p>
+          </div>
+          {profile.related_profiles.length ? (
+            <div className="stack" style={{ marginTop: "1rem" }}>
+              {profile.related_profiles.map((item, index) => (
+                <article className="list-item" key={item.id || `related-profile-${index}`}>
+                  <div className="toolbar">
+                    <strong>{item.name || `Profil ${index + 1}`}</strong>
+                    <button className="button button--ghost" type="button" onClick={() => removeRelatedProfile(index)}>
+                      {sozluk.settings.profileRelatedProfileRemove}
+                    </button>
+                  </div>
+                  <div className="field-grid" style={{ marginTop: "0.75rem" }}>
+                    <label className="stack stack--tight">
+                      <span>{sozluk.settings.profileRelatedProfileName}</span>
+                      <input
+                        className="input"
+                        value={item.name}
+                        onChange={(event) => updateRelatedProfileField(index, "name", event.target.value)}
+                      />
+                    </label>
+                    <label className="stack stack--tight">
+                      <span>{sozluk.settings.profileRelatedProfileRelationship}</span>
+                      <input
+                        className="input"
+                        value={item.relationship}
+                        onChange={(event) => updateRelatedProfileField(index, "relationship", event.target.value)}
+                      />
+                    </label>
+                    <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+                      <span>{sozluk.settings.profileRelatedProfilePreferences}</span>
+                      <textarea
+                        className="textarea"
+                        rows={3}
+                        value={item.preferences}
+                        onChange={(event) => updateRelatedProfileField(index, "preferences", event.target.value)}
+                      />
+                    </label>
+                    <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+                      <span>{sozluk.settings.profileRelatedProfileNotes}</span>
+                      <textarea
+                        className="textarea"
+                        rows={3}
+                        value={item.notes}
+                        onChange={(event) => updateRelatedProfileField(index, "notes", event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="stack" style={{ marginTop: "0.9rem" }}>
+                    <div className="toolbar">
+                      <strong>{sozluk.settings.profileImportantDatesTitle}</strong>
+                      <button className="button button--ghost" type="button" onClick={() => addRelatedProfileImportantDate(index)}>
+                        {sozluk.settings.profileRelatedProfileDateAdd}
+                      </button>
+                    </div>
+                    {item.important_dates.length ? (
+                      <div className="list">
+                        {item.important_dates.map((dateItem, dateIndex) => (
+                          <article className="list-item" key={`${item.id || index}-date-${dateIndex}`}>
+                            <div className="field-grid">
+                              <label className="stack stack--tight">
+                                <span>{sozluk.settings.profileImportantDateLabel}</span>
+                                <input
+                                  className="input"
+                                  value={dateItem.label}
+                                  onChange={(event) => updateRelatedProfileImportantDate(index, dateIndex, { label: event.target.value })}
+                                />
+                              </label>
+                              <label className="stack stack--tight">
+                                <span>{sozluk.settings.profileImportantDateDate}</span>
+                                <input
+                                  className="input"
+                                  type="date"
+                                  value={dateItem.date}
+                                  onChange={(event) => updateRelatedProfileImportantDate(index, dateIndex, { date: event.target.value })}
+                                />
+                              </label>
+                              <label className="stack stack--tight">
+                                <span>{sozluk.settings.profileImportantDateRecurring}</span>
+                                <select
+                                  className="select"
+                                  value={dateItem.recurring_annually ? "yearly" : "single"}
+                                  onChange={(event) => updateRelatedProfileImportantDate(index, dateIndex, { recurring_annually: event.target.value === "yearly" })}
+                                >
+                                  <option value="yearly">{sozluk.settings.profileImportantDateRecurringYearly}</option>
+                                  <option value="single">{sozluk.settings.profileImportantDateRecurringSingle}</option>
+                                </select>
+                              </label>
+                              <div className="stack stack--tight">
+                                <span>&nbsp;</span>
+                                <button className="button button--ghost" type="button" onClick={() => removeRelatedProfileImportantDate(index, dateIndex)}>
+                                  {sozluk.settings.profileImportantDateRemove}
+                                </button>
+                              </div>
+                              <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+                                <span>{sozluk.settings.profileImportantDateNotes}</span>
+                                <input
+                                  className="input"
+                                  value={dateItem.notes || ""}
+                                  onChange={(event) => updateRelatedProfileImportantDate(index, dateIndex, { notes: event.target.value })}
+                                />
+                              </label>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyState
+                        title={sozluk.settings.profileImportantDatesEmptyTitle}
+                        description={sozluk.settings.profileImportantDatesEmptyDescription}
+                      />
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title={sozluk.settings.profileRelatedProfilesEmptyTitle}
+              description={sozluk.settings.profileRelatedProfilesEmptyDescription}
+            />
+          )}
+        </SectionCard>
+        {visibleProfileFacts.length ? (
+          <div className="callout" style={{ marginTop: "1rem" }}>
+            <strong>Profilden çıkarılan özet</strong>
+            <p style={{ margin: "0.5rem 0 0" }}>
+              {visibleProfileFacts.map((item) => `${item.label}: ${item.value}`).join(" · ")}
+            </p>
+          </div>
+        ) : null}
+        <SectionCard
+          title={sozluk.settings.profileImportantDatesTitle}
+          subtitle={sozluk.settings.profileImportantDatesSubtitle}
+          actions={(
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button className="button button--secondary" type="button" onClick={addImportantDate}>
+                {sozluk.settings.profileImportantDatesAddAction}
+              </button>
+              <button className="button" type="button" onClick={handleSaveProfile} disabled={isSavingProfile}>
+                {isSavingProfile ? sozluk.settings.profileImportantDatesSaving : sozluk.settings.profileImportantDatesSaveAction}
+              </button>
+            </div>
+          )}
+        >
+          <div className="callout callout--accent" style={{ marginBottom: "1rem" }}>
+            <strong>{sozluk.settings.profileImportantDatesCalloutTitle}</strong>
+            <p style={{ marginBottom: 0 }}>{sozluk.settings.profileImportantDatesCalloutDescription}</p>
+          </div>
+          {profile.important_dates.length ? (
+            <div className="list">
+              {profile.important_dates.map((item, index) => (
+                <article className="list-item" key={`${item.label}-${item.date}-${index}`}>
+                  <div className="field-grid">
+                    <label className="stack stack--tight">
+                      <span>{sozluk.settings.profileImportantDateLabel}</span>
+                      <input
+                        className="input"
+                        value={item.label}
+                        onChange={(event) => updateImportantDate(index, { label: event.target.value })}
+                      />
+                    </label>
+                    <label className="stack stack--tight">
+                      <span>{sozluk.settings.profileImportantDateDate}</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={item.date}
+                        onChange={(event) => updateImportantDate(index, { date: event.target.value })}
+                      />
+                    </label>
+                    <label className="stack stack--tight">
+                      <span>{sozluk.settings.profileImportantDateRecurring}</span>
+                      <select
+                        className="select"
+                        value={item.recurring_annually ? "yearly" : "single"}
+                        onChange={(event) => updateImportantDate(index, { recurring_annually: event.target.value === "yearly" })}
+                      >
+                        <option value="yearly">{sozluk.settings.profileImportantDateRecurringYearly}</option>
+                        <option value="single">{sozluk.settings.profileImportantDateRecurringSingle}</option>
+                      </select>
+                    </label>
+                    <div className="stack stack--tight">
+                      <span>&nbsp;</span>
+                      <button className="button button--ghost" type="button" onClick={() => removeImportantDate(index)}>
+                        {sozluk.settings.profileImportantDateRemove}
+                      </button>
+                    </div>
+                    <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+                      <span>{sozluk.settings.profileImportantDateNotes}</span>
+                      <input
+                        className="input"
+                        value={item.notes || ""}
+                        onChange={(event) => updateImportantDate(index, { notes: event.target.value })}
+                      />
+                    </label>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title={sozluk.settings.profileImportantDatesEmptyTitle} description={sozluk.settings.profileImportantDatesEmptyDescription} />
+          )}
+        </SectionCard>
         <div className="callout callout--accent" style={{ marginTop: "1rem" }}>
           <strong>{sozluk.settings.profileCalendarFlowTitle}</strong>
           <p style={{ marginBottom: 0 }}>{sozluk.settings.profileCalendarFlowDescription}</p>
@@ -676,6 +1177,14 @@ export function SettingsPage() {
             <span>{sozluk.settings.assistantNameLabel}</span>
             <input className="input" value={assistantRuntimeProfile.assistant_name} onChange={(event) => updateAssistantRuntimeField("assistant_name", event.target.value)} />
           </label>
+          <label className="stack stack--tight">
+            <span>{sozluk.settings.assistantRoleSummaryLabel}</span>
+            <input className="input" value={assistantRuntimeProfile.role_summary} onChange={(event) => updateAssistantRuntimeField("role_summary", event.target.value)} />
+          </label>
+          <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
+            <span>{sozluk.settings.assistantToneLabel}</span>
+            <input className="input" value={assistantRuntimeProfile.tone} onChange={(event) => updateAssistantRuntimeField("tone", event.target.value)} />
+          </label>
           <label className="stack stack--tight" style={{ gridColumn: "1 / -1" }}>
             <span>{sozluk.settings.assistantSoulNotesLabel}</span>
             <textarea
@@ -697,6 +1206,16 @@ export function SettingsPage() {
             />
           </label>
         </div>
+        <div className="callout" style={{ marginTop: "1rem" }}>
+          <strong>Asistan persona özeti</strong>
+          <p style={{ marginBottom: 0 }}>
+            {[
+              assistantRuntimeProfile.assistant_name && `Ad: ${assistantRuntimeProfile.assistant_name}`,
+              assistantRuntimeProfile.role_summary && `Rol: ${assistantRuntimeProfile.role_summary}`,
+              assistantRuntimeProfile.tone && `Ton: ${assistantRuntimeProfile.tone}`,
+            ].filter(Boolean).join(" · ") || "Henüz persona bilgisi yazılmadı."}
+          </p>
+        </div>
         <div className="callout callout--accent" style={{ marginTop: "1rem" }}>
           <strong>{sozluk.settings.assistantRuntimeFlowTitle}</strong>
           <p style={{ marginBottom: 0 }}>{sozluk.settings.assistantRuntimeFlowDescription}</p>
@@ -704,33 +1223,6 @@ export function SettingsPage() {
         {assistantRuntimeMessage ? <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{assistantRuntimeMessage}</p> : null}
       </SectionCard>
       </div>
-      )}
-
-      {activeTab === "integrations" && (
-        <div className="stack">
-          <SectionCard title="Bağlı araç yetkinlikleri" subtitle="Okuma, yazma ve onay sınırları tek listede görünür.">
-            {assistantToolsStatus.length ? (
-              <div className="list">
-                {assistantToolsStatus.map((item) => (
-                  <article className="list-item" key={item.provider}>
-                    <div className="toolbar">
-                      <strong>{item.account_label || item.provider}</strong>
-                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                        <StatusBadge tone={item.connected ? "accent" : "warning"}>{item.status}</StatusBadge>
-                        <StatusBadge>{item.write_enabled ? "Yazma açık" : "Salt okuma"}</StatusBadge>
-                        <StatusBadge>{item.approval_required ? "Onaylı aksiyon" : "Doğrudan"}</StatusBadge>
-                      </div>
-                    </div>
-                    <p className="list-item__meta">{item.capabilities.join(" · ")}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Araç özeti yüklenemedi" description="Bağlı araç durumu geldiğinde burada görünür." />
-            )}
-          </SectionCard>
-          <IntegrationSetupPanel mode="settings" />
-        </div>
       )}
 
       {activeTab === "system" && (

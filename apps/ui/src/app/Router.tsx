@@ -6,6 +6,7 @@ import { DocumentViewerPage } from "../pages/DocumentViewerPage";
 import { DocumentsPage } from "../pages/DocumentsPage";
 import { MatterDetailPage } from "../pages/MatterDetailPage";
 import { MattersPage } from "../pages/MattersPage";
+import { OnboardingPage } from "../pages/OnboardingPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { WorkspacePage } from "../pages/WorkspacePage";
 
@@ -25,7 +26,7 @@ export function AppRouter() {
         <Route path="/drafts" element={<Navigate to={{ pathname: "/assistant", search: "?tool=drafts" }} replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/connectors" element={<Navigate to={{ pathname: "/assistant", search: "?tool=runtime" }} replace />} />
-        <Route path="/onboarding" element={<Navigate to="/settings" replace />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/_embedded/workspace" element={<WorkspacePage />} />
         <Route path="/_embedded/matters" element={<MattersPage />} />
         <Route path="/_embedded/documents" element={<DocumentsPage />} />

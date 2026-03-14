@@ -168,12 +168,12 @@ class WorkspaceAttachRequest(BaseModel):
 
 class AssistantActionGenerateRequest(BaseModel):
     action_type: str = Field(
-        pattern="^(send_email|reply_email|send_telegram_message|create_task|prepare_client_update|prepare_internal_summary)$"
+        pattern="^(send_email|reply_email|send_telegram_message|send_whatsapp_message|post_x_update|reserve_travel_ticket|create_task|prepare_client_update|prepare_internal_summary)$"
     )
     matter_id: int | None = Field(default=None, gt=0)
     title: str | None = Field(default=None, max_length=240)
     instructions: str | None = Field(default=None, max_length=1600)
-    target_channel: str | None = Field(default=None, pattern="^(email|telegram|internal|task)$")
+    target_channel: str | None = Field(default=None, pattern="^(email|telegram|whatsapp|x|travel|internal|task)$")
     to_contact: str | None = Field(default=None, max_length=255)
     source_refs: list[dict] | None = Field(default=None, max_length=20)
 
@@ -249,6 +249,57 @@ class GoogleSyncRequest(BaseModel):
     synced_at: datetime | None = None
 
 
+class WhatsAppMessageMirrorRequest(BaseModel):
+    provider: str = Field(default="whatsapp")
+    conversation_ref: str = Field(min_length=1, max_length=255)
+    message_ref: str = Field(min_length=1, max_length=255)
+    sender: str | None = Field(default=None, max_length=255)
+    recipient: str | None = Field(default=None, max_length=255)
+    body: str = Field(min_length=1, max_length=4000)
+    direction: str = Field(default="inbound", pattern="^(inbound|outbound)$")
+    sent_at: datetime | None = None
+    reply_needed: bool = False
+    matter_id: int | None = Field(default=None, gt=0)
+    metadata: dict | None = None
+
+
+class WhatsAppSyncRequest(BaseModel):
+    account_label: str | None = Field(default=None, max_length=255)
+    phone_number_id: str | None = Field(default=None, max_length=255)
+    display_phone_number: str | None = Field(default=None, max_length=255)
+    verified_name: str | None = Field(default=None, max_length=255)
+    note: str | None = Field(default=None, max_length=1000)
+    messages: list[WhatsAppMessageMirrorRequest] = Field(default_factory=list, max_length=100)
+    synced_at: datetime | None = None
+
+
+class XPostMirrorRequest(BaseModel):
+    provider: str = Field(default="x")
+    external_id: str = Field(min_length=1, max_length=255)
+    post_type: str = Field(default="post", pattern="^(post|mention|reply)$")
+    author_handle: str | None = Field(default=None, max_length=255)
+    content: str = Field(min_length=1, max_length=4000)
+    posted_at: datetime | None = None
+    reply_needed: bool = False
+    metadata: dict | None = None
+
+
+class XSyncRequest(BaseModel):
+    account_label: str | None = Field(default=None, max_length=255)
+    user_id: str | None = Field(default=None, max_length=255)
+    scopes: list[str] | None = Field(default=None, max_length=20)
+    mentions: list[XPostMirrorRequest] = Field(default_factory=list, max_length=50)
+    posts: list[XPostMirrorRequest] = Field(default_factory=list, max_length=50)
+    synced_at: datetime | None = None
+
+
+class AssistantDispatchReportRequest(BaseModel):
+    action_id: int | None = Field(default=None, gt=0)
+    external_message_id: str | None = Field(default=None, max_length=255)
+    note: str | None = Field(default=None, max_length=1200)
+    error: str | None = Field(default=None, max_length=2000)
+
+
 class ProfileImportantDateRequest(BaseModel):
     label: str = Field(min_length=1, max_length=160)
     date: str = Field(min_length=10, max_length=10, pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -256,8 +307,18 @@ class ProfileImportantDateRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=600)
 
 
+class RelatedProfileRequest(BaseModel):
+    id: str | None = Field(default=None, max_length=80)
+    name: str = Field(min_length=1, max_length=160)
+    relationship: str | None = Field(default=None, max_length=120)
+    preferences: str | None = Field(default=None, max_length=1600)
+    notes: str | None = Field(default=None, max_length=1600)
+    important_dates: list[ProfileImportantDateRequest] = Field(default_factory=list, max_length=12)
+
+
 class UserProfileRequest(BaseModel):
     display_name: str | None = Field(default=None, max_length=160)
+    favorite_color: str | None = Field(default=None, max_length=120)
     food_preferences: str | None = Field(default=None, max_length=1200)
     transport_preference: str | None = Field(default=None, max_length=240)
     weather_preference: str | None = Field(default=None, max_length=240)
@@ -265,6 +326,7 @@ class UserProfileRequest(BaseModel):
     communication_style: str | None = Field(default=None, max_length=600)
     assistant_notes: str | None = Field(default=None, max_length=2400)
     important_dates: list[ProfileImportantDateRequest] = Field(default_factory=list, max_length=24)
+    related_profiles: list[RelatedProfileRequest] = Field(default_factory=list, max_length=24)
 
 
 class AssistantRuntimeProfileRequest(BaseModel):

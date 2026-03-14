@@ -52,6 +52,16 @@ class Settings:
     telegram_configured: bool = False
     telegram_bot_username: str = ""
     telegram_allowed_user_id: str = ""
+    whatsapp_enabled: bool = False
+    whatsapp_configured: bool = False
+    whatsapp_account_label: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_display_phone_number: str = ""
+    x_enabled: bool = False
+    x_configured: bool = False
+    x_account_label: str = ""
+    x_user_id: str = ""
+    x_scopes: tuple[str, ...] = ()
 
 
 def _repo_root() -> Path:
@@ -125,6 +135,16 @@ def get_settings() -> Settings:
         telegram_configured=os.getenv("LAWCOPILOT_TELEGRAM_CONFIGURED", "false").lower() == "true",
         telegram_bot_username=os.getenv("LAWCOPILOT_TELEGRAM_BOT_USERNAME", ""),
         telegram_allowed_user_id=os.getenv("LAWCOPILOT_TELEGRAM_ALLOWED_USER_ID", ""),
+        whatsapp_enabled=os.getenv("LAWCOPILOT_WHATSAPP_ENABLED", "false").lower() == "true",
+        whatsapp_configured=os.getenv("LAWCOPILOT_WHATSAPP_CONFIGURED", "false").lower() == "true",
+        whatsapp_account_label=os.getenv("LAWCOPILOT_WHATSAPP_ACCOUNT_LABEL", ""),
+        whatsapp_phone_number_id=os.getenv("LAWCOPILOT_WHATSAPP_PHONE_NUMBER_ID", ""),
+        whatsapp_display_phone_number=os.getenv("LAWCOPILOT_WHATSAPP_DISPLAY_PHONE_NUMBER", ""),
+        x_enabled=os.getenv("LAWCOPILOT_X_ENABLED", "false").lower() == "true",
+        x_configured=os.getenv("LAWCOPILOT_X_CONFIGURED", "false").lower() == "true",
+        x_account_label=os.getenv("LAWCOPILOT_X_ACCOUNT_LABEL", ""),
+        x_user_id=os.getenv("LAWCOPILOT_X_USER_ID", ""),
+        x_scopes=tuple(scope.strip() for scope in os.getenv("LAWCOPILOT_X_SCOPES", "").split(",") if scope.strip()),
     )
 
 

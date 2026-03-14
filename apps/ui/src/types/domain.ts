@@ -139,6 +139,20 @@ export type WorkspaceDocument = {
   updated_at: string;
 };
 
+export type GoogleDriveFile = {
+  id: number;
+  office_id: string;
+  provider: string;
+  external_id: string;
+  name: string;
+  mime_type?: string | null;
+  web_view_link?: string | null;
+  modified_at?: string | null;
+  matter_id?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkspaceChunk = {
   id: number;
   workspace_document_id: number;
@@ -428,9 +442,19 @@ export type ProfileImportantDate = {
   days_until?: number | null;
 };
 
+export type RelatedProfile = {
+  id?: string | null;
+  name: string;
+  relationship: string;
+  preferences: string;
+  notes: string;
+  important_dates: ProfileImportantDate[];
+};
+
 export type UserProfile = {
   office_id: string;
   display_name: string;
+  favorite_color: string;
   food_preferences: string;
   transport_preference: string;
   weather_preference: string;
@@ -438,6 +462,7 @@ export type UserProfile = {
   communication_style: string;
   assistant_notes: string;
   important_dates: ProfileImportantDate[];
+  related_profiles: RelatedProfile[];
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -453,6 +478,51 @@ export type AssistantRuntimeProfile = {
   heartbeat_extra_checks: string[];
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+export type AssistantOnboardingState = {
+  complete: boolean;
+  stage?: string;
+  summary?: string;
+  workspace_ready: boolean;
+  provider_ready: boolean;
+  model_ready?: boolean;
+  assistant_ready: boolean;
+  user_ready: boolean;
+  blocked_by_setup?: boolean;
+  provider_type?: string;
+  provider_model?: string;
+  workspace_root_name?: string | null;
+  next_question?: string;
+  interview_intro?: string;
+  interview_topics?: string[];
+  steps?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    complete: boolean;
+    action: string;
+  }>;
+  questions?: Array<{
+    id: string;
+    field: string;
+    target: string;
+    question: string;
+    reason: string;
+  }>;
+  suggested_prompts?: string[];
+  starter_prompts?: string[];
+  profile?: {
+    display_name?: string;
+    favorite_color?: string;
+    transport_preference?: string;
+    communication_style?: string;
+  };
+  assistant_profile?: {
+    assistant_name?: string;
+    tone?: string;
+    role_summary?: string;
+  };
 };
 
 export type AssistantRuntimeWorkspaceFile = {
@@ -534,6 +604,9 @@ export type SuggestedAction = {
   target_channel?: string | null;
   draft_id?: number | null;
   status: string;
+  dispatch_state?: string | null;
+  dispatch_error?: string | null;
+  external_message_id?: string | null;
   manual_review_required: boolean;
   created_at: string;
   updated_at: string;
@@ -580,6 +653,10 @@ export type OutboundDraft = {
   ai_provider?: string | null;
   approval_status: string;
   delivery_status: string;
+  dispatch_state?: string | null;
+  dispatch_error?: string | null;
+  external_message_id?: string | null;
+  last_dispatch_at?: string | null;
   created_by?: string;
   approved_by?: string | null;
   created_at: string;
@@ -588,6 +665,9 @@ export type OutboundDraft = {
 
 export type AssistantHomeResponse = {
   today_summary: string;
+  display_name?: string;
+  greeting_title?: string;
+  greeting_message?: string;
   counts: {
     agenda: number;
     inbox: number;
@@ -610,8 +690,20 @@ export type AssistantHomeResponse = {
     details: string;
     action: string;
   }>;
+  proactive_suggestions?: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    details: string;
+    action_label?: string;
+    prompt?: string;
+    matter_id?: number | null;
+    tool?: string | null;
+    priority?: string;
+  }>;
   connected_accounts: ConnectedAccount[];
   generated_from: string;
+  onboarding?: AssistantOnboardingState;
 };
 
 export type AssistantThreadMessage = {
@@ -651,6 +743,7 @@ export type AssistantThreadResponse = {
   requires_approval?: boolean;
   ai_provider?: string | null;
   ai_model?: string | null;
+  onboarding?: AssistantOnboardingState;
   proposed_actions?: Array<Record<string, unknown>>;
   approval_requests?: Array<Record<string, unknown>>;
   memory_updates?: Array<Record<string, unknown>>;
@@ -684,6 +777,35 @@ export type TelegramIntegrationStatus = {
   account_label?: string;
   status: string;
   allowed_user_id?: string;
+  connected_account?: ConnectedAccount | null;
+  desktop_managed: boolean;
+};
+
+export type WhatsAppIntegrationStatus = {
+  provider: string;
+  configured: boolean;
+  enabled: boolean;
+  account_label?: string;
+  phone_number_id?: string;
+  display_phone_number?: string;
+  status: string;
+  message_count?: number;
+  last_sync_at?: string | null;
+  connected_account?: ConnectedAccount | null;
+  desktop_managed: boolean;
+};
+
+export type XIntegrationStatus = {
+  provider: string;
+  configured: boolean;
+  enabled: boolean;
+  account_label?: string;
+  user_id?: string;
+  scopes: string[];
+  status: string;
+  mention_count?: number;
+  post_count?: number;
+  last_sync_at?: string | null;
   connected_account?: ConnectedAccount | null;
   desktop_managed: boolean;
 };

@@ -13,6 +13,13 @@ from .config import get_settings, load_model_profiles, resolve_repo_path
 from .core import assistant_runtime_mode
 from .connectors.safety import ConnectorPolicy, ConnectorSafetyWrapper
 from .connectors.registry import build_tools_status
+from .connectors.web_search import (
+    build_travel_context,
+    build_web_search_context,
+    is_travel_booking_query,
+    is_travel_query,
+    is_web_search_query,
+)
 from .llm.direct_provider import DirectProviderLLM
 from .llm.service import LLMService
 from .memory import MemoryService
@@ -29,8 +36,11 @@ from .schemas import (
     AssistantCalendarEventCreateRequest,
     AssistantRuntimeProfileRequest,
     AssistantDraftSendRequest,
+    AssistantDispatchReportRequest,
     AssistantThreadMessageRequest,
     GoogleSyncRequest,
+    WhatsAppSyncRequest,
+    XSyncRequest,
     QueryIn,
     QueryJobCreateRequest,
     TokenRequest,
@@ -57,7 +67,15 @@ from .schemas import (
     EmailDraftRetractRequest,
     SocialIngestRequest,
 )
-from .assistant import build_assistant_agenda, build_assistant_calendar, build_assistant_home, build_assistant_inbox, build_suggested_actions, sync_connected_accounts_from_settings
+from .assistant import (
+    _profile_preference_text,
+    build_assistant_agenda,
+    build_assistant_calendar,
+    build_assistant_home,
+    build_assistant_inbox,
+    build_suggested_actions,
+    sync_connected_accounts_from_settings,
+)
 from .workflows import build_activity_stream, build_chronology, build_risk_notes, build_task_recommendations, generate_matter_draft
 from .workspace import (
     build_workspace_chunks,
@@ -179,9 +197,10 @@ def _profile_summary_lines(profile: dict | None) -> list[str]:
     lines: list[str] = []
     if profile.get("display_name"):
         lines.append(f"- Kullanıcı adı / hitap: {_truncate_for_prompt(profile['display_name'], 120)}")
+    if profile.get("favorite_color"):
+        lines.append(f"- Sevdiği renk: {_truncate_for_prompt(profile['favorite_color'], 120)}")
     if profile.get("assistant_notes"):
         lines.append(f"- Kullanıcı profil notu: {_truncate_for_prompt(profile['assistant_notes'], 260)}")
-        return lines
     if profile.get("food_preferences"):
         lines.append(f"- Yeme içme tercihleri: {_truncate_for_prompt(profile['food_preferences'], 220)}")
     if profile.get("transport_preference"):
@@ -201,6 +220,16 @@ def _profile_summary_lines(profile: dict | None) -> list[str]:
             notes = _truncate_for_prompt(item.get("notes") or "", 100)
             compact.append(f"{label} ({date_value})" + (f": {notes}" if notes else ""))
         lines.append(f"- Önemli tarihler: {'; '.join(compact)}")
+    related_profiles = profile.get("related_profiles") or []
+    if related_profiles:
+        compact_related: list[str] = []
+        for item in related_profiles[:4]:
+            name = _truncate_for_prompt(item.get("name") or "Yakın çevre", 80)
+            relationship = _truncate_for_prompt(item.get("relationship") or "", 40)
+            notes = _truncate_for_prompt(item.get("notes") or item.get("preferences") or "", 100)
+            label = f"{name} ({relationship})" if relationship else name
+            compact_related.append(label + (f": {notes}" if notes else ""))
+        lines.append(f"- Yakın çevre profilleri: {'; '.join(compact_related)}")
     return lines
 
 
@@ -208,6 +237,7 @@ def _empty_profile_payload(office_id: str) -> dict:
     return {
         "office_id": office_id,
         "display_name": "",
+        "favorite_color": "",
         "food_preferences": "",
         "transport_preference": "",
         "weather_preference": "",
@@ -215,6 +245,7 @@ def _empty_profile_payload(office_id: str) -> dict:
         "communication_style": "",
         "assistant_notes": "",
         "important_dates": [],
+        "related_profiles": [],
         "created_at": None,
         "updated_at": None,
     }
@@ -232,6 +263,80 @@ def _empty_assistant_runtime_profile_payload(office_id: str) -> dict:
         "heartbeat_extra_checks": [],
         "created_at": None,
         "updated_at": None,
+    }
+
+
+def _assistant_home_payload(settings, store: Persistence) -> dict[str, Any]:
+    home = build_assistant_home(store, settings.office_id, settings=settings)
+    onboarding = _assistant_onboarding_state(settings, store)
+    merged_requires_setup = list(onboarding.get("setup_items") or []) + list(home.get("requires_setup") or [])
+    deduped: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for item in merged_requires_setup:
+        key = str(item.get("id") or "")
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
+        deduped.append(item)
+    home["requires_setup"] = deduped
+    home["onboarding"] = onboarding
+    return home
+
+
+def _should_drive_onboarding(query: str, *, prior_messages: list[dict], onboarding_state: dict[str, object], memory_updates: list[dict[str, Any]]) -> bool:
+    if bool(onboarding_state.get("complete")):
+        return False
+    if bool(onboarding_state.get("blocked_by_setup")):
+        return True
+    normalized = _normalize_tr_text(query)
+    if memory_updates:
+        return True
+    if len(prior_messages) <= 1:
+        return True
+    return any(token in normalized for token in ("merhaba", "selam", "benim", "bana", "senin", "adim", "ismim", "renk", "tercih", "sakaci", "samimi", "resmi"))
+
+
+def _compose_assistant_onboarding_reply(query: str, *, home: dict[str, Any], onboarding_state: dict[str, object], memory_updates: list[dict[str, Any]]) -> dict[str, Any]:
+    setup_items = list(onboarding_state.get("setup_items") or [])
+    next_questions = list(onboarding_state.get("next_questions") or [])
+    acknowledgements = [str(item.get("summary") or "").strip() for item in memory_updates if str(item.get("summary") or "").strip()]
+    if setup_items:
+        checklist = " ".join(f"{item.get('title')}: {item.get('details')}" for item in setup_items[:2])
+        content = (
+            ("Not aldım. " if acknowledgements else "")
+            + "Önce ilk kurulum adımlarını tamamlayalım. "
+            + checklist
+            + " Hazır olduğunda Ayarlar ekranından sağlayıcını ve modelini bağla; sonra seni ve beni tanımaya sohbetten devam edeceğim."
+        )
+    elif next_questions:
+        lead = " ".join(acknowledgements[:2]) + (" " if acknowledgements else "")
+        next_reason = str(next_questions[0].get("reason") or "").strip()
+        content = (
+            f"{lead}Tam kişisel bir asistan kurmak için seni ve kendi çalışma tarzımı tek tek netleştiriyorum. "
+            f"Soruları sırayla soracağım ve cevaplarını profile işleyeceğim. "
+            f"İlk sorum şu: {next_questions[0].get('question')}"
+        )
+        if next_reason:
+            content = f"{content} Bunu sormamın nedeni: {next_reason}"
+    else:
+        content = (
+            "Kurulum ana hatlarıyla tamamlandı. İstersen kendinle ilgili birkaç tercih daha paylaşabilirsin; ben de bunları kullanıcı belleğine işlerim."
+        )
+    return {
+        "content": content.strip(),
+        "assistant_summary": home.get("today_summary") or "",
+        "tool_suggestions": _assistant_tool_suggestions(query, requires_setup=home.get("requires_setup") or []),
+        "linked_entities": [],
+        "draft_preview": None,
+        "requires_approval": False,
+        "generated_from": "assistant_onboarding_guide",
+        "ai_provider": None,
+        "ai_model": None,
+        "source_context": {
+            "priority_items": home.get("priority_items") or [],
+            "requires_setup": home.get("requires_setup") or [],
+            "onboarding": onboarding_state,
+        },
     }
 
 
@@ -631,6 +736,10 @@ def _build_workspace_search_prompt(*, query: str, citations: list[dict], related
 
 def _assistant_tool_key(query: str) -> str:
     normalized = str(query or "").lower()
+    if any(token in normalized for token in ["bilet", "seyahat", "uçuş", "ucus", "otel", "rota"]):
+        return "calendar"
+    if any(token in normalized for token in ["internette", "webde", "web'de", "araştır", "güncel bilgi"]):
+        return "runtime"
     if any(token in normalized for token in ["bugün", "yapılacak", "ajanda"]):
         return "today"
     if any(token in normalized for token in ["takvim", "yarın", "toplantı", "randevu"]):
@@ -675,6 +784,397 @@ def _assistant_tool_suggestions(query: str, *, requires_setup: list[dict[str, ob
     return suggestions
 
 
+def _assistant_onboarding_questions(settings, store: Persistence) -> list[dict[str, str]]:
+    profile = store.get_user_profile(settings.office_id)
+    runtime_profile = store.get_assistant_runtime_profile(settings.office_id)
+    workspace_root = store.get_active_workspace_root(settings.office_id)
+    questions: list[dict[str, str]] = []
+    if not workspace_root:
+        questions.append(
+            {
+                "id": "workspace-root",
+                "field": "workspace_root",
+                "target": "system",
+                "question": "Önce çalışma klasörünü Ayarlar ekranından seçelim. Hazır olduğunda bana haber ver.",
+                "reason": "Kaynak erişimi seçili klasör ve alt klasörleriyle sınırlı.",
+            }
+        )
+    if not settings.provider_configured:
+        questions.append(
+            {
+                "id": "provider-setup",
+                "field": "provider_type",
+                "target": "system",
+                "question": "Önce Ayarlar'dan bir model sağlayıcısı bağlayalım. Codex mi Gemini mi kullanmak istiyorsun?",
+                "reason": "İlk sohbetten sonra modeli seçip doğrudan onunla devam edeceğim.",
+            }
+        )
+    if settings.provider_configured and not str(settings.provider_model or "").strip():
+        questions.append(
+            {
+                "id": "provider-model",
+                "field": "provider_model",
+                "target": "system",
+                "question": "Bağladığın sağlayıcı için hangi modeli varsayılan kullanayım?",
+                "reason": "Masaüstü açılışında ve ilk sohbetlerde bu model kullanılacak.",
+            }
+        )
+    if not str(runtime_profile.get("assistant_name") or "").strip():
+        questions.append(
+            {
+                "id": "assistant-name",
+                "field": "assistant_name",
+                "target": "assistant",
+                "question": "Ben senin için nasıl bir asistan olayım? Bana bir isim ver.",
+                "reason": "Bu bilgi IDENTITY.md ve ayarlardaki asistan profiline yazılacak.",
+            }
+        )
+    if not str(runtime_profile.get("tone") or "").strip() or str(runtime_profile.get("tone") or "").strip() == "Net ve profesyonel":
+        questions.append(
+            {
+                "id": "assistant-tone",
+                "field": "tone",
+                "target": "assistant",
+                "question": "Nasıl konuşayım: daha şakacı, daha ciddi, daha kısa, daha sıcak, yoksa başka bir tarz mı?",
+                "reason": "Konuşma tonumu ve persona notlarımı buna göre güncelleyeceğim.",
+            }
+        )
+    if not str(runtime_profile.get("soul_notes") or "").strip():
+        questions.append(
+            {
+                "id": "assistant-boundaries",
+                "field": "soul_notes",
+                "target": "assistant",
+                "question": "Benden özellikle nasıl davranmamı beklersin? Daha proaktif mi olayım, daha temkinli mi olayım, hangi sınırları hep koruyayım?",
+                "reason": "Asistan davranışını ve çalışma sınırlarını buna göre kuracağım.",
+            }
+        )
+    if not str(runtime_profile.get("role_summary") or "").strip() or str(runtime_profile.get("role_summary") or "").strip() == "Kaynak dayanaklı hukuk çalışma asistanı":
+        questions.append(
+            {
+                "id": "assistant-role",
+                "field": "role_summary",
+                "target": "assistant",
+                "question": "Rolümü nasıl tanımlayayım? Örneğin kişisel hukuk asistanı, operasyon koçu veya daha farklı bir şey olabilir.",
+                "reason": "Bu tanım AGENTS.md ve IDENTITY.md içine yansıyacak.",
+            }
+        )
+    if not str(profile.get("display_name") or "").strip():
+        questions.append(
+            {
+                "id": "user-name",
+                "field": "display_name",
+                "target": "user",
+                "question": "Sana nasıl hitap edeyim?",
+                "reason": "Bu bilgi USER.md ve kişisel profil kartına yazılacak.",
+            }
+        )
+    if not str(profile.get("favorite_color") or "").strip():
+        questions.append(
+            {
+                "id": "favorite-color",
+                "field": "favorite_color",
+                "target": "user",
+                "question": "Hangi rengi seversin?",
+                "reason": "Kişisel tercih bağlamını daha iyi kurmak istiyorum.",
+            }
+        )
+    if not str(profile.get("communication_style") or "").strip():
+        questions.append(
+            {
+                "id": "communication-style",
+                "field": "communication_style",
+                "target": "user",
+                "question": "Sana kısa ve net mi, yoksa daha detaylı mı cevap vermemi istersin?",
+                "reason": "Yanıt biçimimi senin tercihine göre ayarlayacağım.",
+            }
+        )
+    if not str(profile.get("assistant_notes") or "").strip():
+        questions.append(
+            {
+                "id": "work-rhythm",
+                "field": "assistant_notes",
+                "target": "user",
+                "question": "Gün içinde seni en çok hangi konularda desteklememi istersin? Örneğin duruşma hazırlığı, müvekkil takibi, dosya eksikleri, seyahat planı veya aile hatırlatmaları gibi.",
+                "reason": "Günlük proaktif öneri ve takip mantığını buna göre kuracağım.",
+            }
+        )
+    if not str(profile.get("transport_preference") or "").strip():
+        questions.append(
+            {
+                "id": "transport-preference",
+                "field": "transport_preference",
+                "target": "user",
+                "question": "Genelde hangi ulaşım aracını tercih edersin?",
+                "reason": "Ajanda, seyahat ve günlük önerilerimi buna göre şekillendireceğim.",
+            }
+        )
+    if not str(profile.get("food_preferences") or "").strip():
+        questions.append(
+            {
+                "id": "food-preferences",
+                "field": "food_preferences",
+                "target": "user",
+                "question": "Yeme içme tarafında özellikle sevdiğin veya kaçındığın şeyler var mı?",
+                "reason": "Kişisel hatırlatmalar ve önerilerde bunu kullanacağım.",
+            }
+        )
+    if not str(profile.get("travel_preferences") or "").strip():
+        questions.append(
+            {
+                "id": "travel-preferences",
+                "field": "travel_preferences",
+                "target": "user",
+                "question": "Seyahat ederken özellikle sevdiğin bir düzen var mı? Örneğin tren, pencere kenarı, erken planlama gibi.",
+                "reason": "Seyahat planı ve hazırlık önerilerini buna göre vereceğim.",
+            }
+        )
+    if not str(profile.get("weather_preference") or "").strip():
+        questions.append(
+            {
+                "id": "weather-preference",
+                "field": "weather_preference",
+                "target": "user",
+                "question": "Nasıl havaları seversin veya sevmezsin?",
+                "reason": "Günlük öneriler ve kişisel hatırlatma dilini buna göre kuracağım.",
+            }
+        )
+    if not list(profile.get("related_profiles") or []):
+        questions.append(
+            {
+                "id": "related-profiles",
+                "field": "related_profiles",
+                "target": "user",
+                "question": "Hayatında benim bilmem gereken yakın kişiler var mı? Eşin, çocuğun, annen, baban veya düzenli ilgilendiğin biri varsa bunu da tanımak isterim.",
+                "reason": "Önemli tarihleri, hatırlatmaları ve kişisel önerileri buna göre zenginleştireceğim.",
+            }
+        )
+    if not list(profile.get("important_dates") or []):
+        questions.append(
+            {
+                "id": "important-dates",
+                "field": "important_dates",
+                "target": "user",
+                "question": "Unutmamı istemediğin önemli tarihler var mı? Doğum günleri, yıldönümleri, görüşmeler veya özel hatırlatmalar gibi.",
+                "reason": "Takvim boşluklarını ve hazırlık önerilerini bunlara göre kuracağım.",
+            }
+        )
+    return questions
+
+
+def _assistant_onboarding_state(settings, store: Persistence) -> dict[str, object]:
+    profile = store.get_user_profile(settings.office_id) or _empty_profile_payload(settings.office_id)
+    runtime_profile = store.get_assistant_runtime_profile(settings.office_id) or _empty_assistant_runtime_profile_payload(settings.office_id)
+    workspace_root = store.get_active_workspace_root(settings.office_id)
+    questions = _assistant_onboarding_questions(settings, store)
+
+    provider_connected = bool(settings.provider_configured and str(settings.provider_type or "").strip())
+    model_selected = bool(str(settings.provider_model or "").strip())
+    assistant_named = bool(str(runtime_profile.get("assistant_name") or "").strip())
+    assistant_persona_defined = bool(
+        str(runtime_profile.get("soul_notes") or "").strip()
+        or str(runtime_profile.get("role_summary") or "").strip() not in {"", "Kaynak dayanaklı hukuk çalışma asistanı"}
+        or str(runtime_profile.get("tone") or "").strip() not in {"", "Net ve profesyonel"}
+    )
+    user_named = bool(str(profile.get("display_name") or "").strip())
+    preference_count = sum(
+        1
+        for field in (
+            "favorite_color",
+            "food_preferences",
+            "transport_preference",
+            "weather_preference",
+            "travel_preferences",
+            "communication_style",
+        )
+        if str(profile.get(field) or "").strip()
+    )
+    user_context_defined = bool(str(profile.get("assistant_notes") or "").strip()) or preference_count >= 2
+
+    workspace_ready = bool(workspace_root)
+    provider_ready = provider_connected
+    model_ready = model_selected
+    assistant_ready = assistant_named and assistant_persona_defined
+    user_ready = user_named and user_context_defined
+
+    setup_items: list[dict[str, object]] = []
+    if not workspace_ready:
+        setup_items.append(
+            {
+                "id": "setup-workspace",
+                "title": "Çalışma klasörünü seçin",
+                "details": "Masaüstü uygulaması yalnız seçilen klasör ve alt klasörlerinde çalışır.",
+                "action": "open_settings",
+                "route": "/settings",
+            }
+        )
+    if not provider_connected:
+        setup_items.append(
+            {
+                "id": "setup-provider",
+                "title": "Bir model sağlayıcısı bağlayın",
+                "details": "Gemini API, OpenAI API, Codex OAuth veya yerel Ollama ile başlayabilirsiniz.",
+                "action": "open_settings",
+                "route": "/settings",
+            }
+        )
+    elif not model_selected:
+        setup_items.append(
+            {
+                "id": "setup-provider-model",
+                "title": "Varsayılan modeli seçin",
+                "details": "Bağlanan sağlayıcıdan kullanmak istediğiniz modeli seçin.",
+                "action": "open_settings",
+                "route": "/settings",
+            }
+        )
+
+    workspace_ready = bool(workspace_root)
+    if not workspace_ready:
+        stage = "workspace"
+    elif not provider_ready:
+        stage = "provider"
+    elif not model_ready:
+        stage = "model"
+    elif not assistant_ready:
+        stage = "assistant"
+    elif not user_ready:
+        stage = "user"
+    else:
+        stage = "complete"
+    complete = workspace_ready and provider_ready and model_ready and assistant_ready and user_ready
+    next_question = questions[0]["question"] if questions else ""
+    summary = (
+        "Kurulum tamamlandı."
+        if complete
+        else "Asistan ilk görüşmede önce kendi kimliğini, sonra seni, çalışma düzenini ve kişisel tercihlerini tanıyacak."
+    )
+    suggested_prompts = [item["question"] for item in questions[:4]]
+    interview_intro = (
+        "İlk açılışta asistan seninle kısa bir tanışma röportajı yapar. Soruları tek tek sorar, cevaplarını profile işler ve zamanla daha kişisel öneriler üretir."
+    )
+    return {
+        "complete": complete,
+        "stage": stage,
+        "summary": summary,
+        "blocked_by_setup": bool(setup_items),
+        "workspace_ready": workspace_ready,
+        "workspace_configured": workspace_ready,
+        "provider_ready": provider_ready,
+        "provider_connected": provider_connected,
+        "model_ready": model_ready,
+        "model_selected": model_selected,
+        "assistant_ready": assistant_ready,
+        "assistant_named": assistant_named,
+        "assistant_persona_defined": assistant_persona_defined,
+        "user_ready": user_ready,
+        "user_named": user_named,
+        "user_context_defined": user_context_defined,
+        "provider_type": str(settings.provider_type or ""),
+        "provider_model": str(settings.provider_model or ""),
+        "selected_model": str(settings.provider_model or ""),
+        "workspace_root_name": workspace_root.get("display_name") if workspace_root else None,
+        "next_question": next_question,
+        "next_questions": questions[:4],
+        "setup_items": setup_items,
+        "questions": questions[:8],
+        "suggested_prompts": suggested_prompts,
+        "interview_intro": interview_intro,
+        "interview_topics": [
+            "Asistanın adı, tonu ve çalışma tarzı",
+            "Size nasıl hitap edeceği",
+            "Renk, iletişim, ulaşım, seyahat ve yeme içme tercihleri",
+            "Aile ve yakın çevre bilgileri",
+            "Önemli tarihler ve rutinler",
+            "Hangi işlerde proaktif davranması gerektiği",
+        ],
+        "starter_prompts": [
+            "Tanışma görüşmesini başlatalım.",
+            "Önce senin adını ve nasıl davranmanı istediğimi konuşalım.",
+            "Sonra benim alışkanlıklarımı ve önemli kişileri konuşalım.",
+        ],
+        "profile": {
+            "display_name": profile.get("display_name") or "",
+            "favorite_color": profile.get("favorite_color") or "",
+            "transport_preference": profile.get("transport_preference") or "",
+            "communication_style": profile.get("communication_style") or "",
+        },
+        "assistant_profile": {
+            "assistant_name": runtime_profile.get("assistant_name") or "",
+            "tone": runtime_profile.get("tone") or "",
+            "role_summary": runtime_profile.get("role_summary") or "",
+        },
+    }
+
+
+def _is_onboarding_turn(query: str, prior_messages: list[dict[str, object]], onboarding_state: dict[str, object]) -> bool:
+    if bool(onboarding_state.get("complete")):
+        return False
+    normalized = _normalize_tr_text(query)
+    operational_tokens = (
+        "belge",
+        "dosya",
+        "takvim",
+        "ajanda",
+        "mail",
+        "e posta",
+        "mesaj",
+        "whatsapp",
+        "telegram",
+        "tweet",
+        "gonderi",
+        "seyahat",
+        "bilet",
+        "tren",
+        "ara",
+        "bul",
+        "ozet",
+        "hazirla",
+        "gonder",
+    )
+    if (
+        _extract_calendar_candidate(query)
+        or _is_document_inventory_query(query)
+        or is_web_search_query(query)
+        or is_travel_query(query)
+        or is_travel_booking_query(query)
+        or any(token in normalized for token in operational_tokens)
+    ):
+        return False
+    if not prior_messages:
+        return True
+    return any(
+        token in normalized
+        for token in (
+            "merhaba",
+            "selam",
+            "tanisalim",
+            "taniyalim",
+            "sen kimsin",
+            "ben kimim",
+            "profil",
+            "ayar",
+        )
+    )
+
+
+def _append_onboarding_followup(
+    content: str,
+    onboarding_state: dict[str, object],
+    *,
+    memory_updates: list[dict[str, object]] | None = None,
+) -> str:
+    if bool(onboarding_state.get("complete")):
+        return content
+    next_question = str(onboarding_state.get("next_question") or "").strip()
+    if not next_question:
+        return content
+    prefix = "Bunu da profile işledim." if memory_updates else "Kurulumu biraz daha kişiselleştirelim."
+    if next_question in content:
+        return content
+    return f"{content}\n\n{prefix} {next_question}".strip()
+
+
 def _assistant_home_context_text(home: dict, agenda: list[dict], inbox: list[dict], calendar: list[dict]) -> str:
     lines = [
         f"Günlük özet: {home.get('today_summary') or 'Özet yok.'}",
@@ -693,6 +1193,152 @@ def _assistant_home_context_text(home: dict, agenda: list[dict], inbox: list[dic
     for item in agenda[:4]:
         lines.append(f"- {item.get('title')}: {_truncate_for_prompt(item.get('details') or '', 160)}")
     return "\n".join(lines)
+
+
+def _assistant_document_label(item: dict | None) -> str:
+    payload = item or {}
+    return str(
+        payload.get("relative_path")
+        or payload.get("filename")
+        or payload.get("display_name")
+        or payload.get("name")
+        or "Belge"
+    ).strip()
+
+
+def _assistant_document_inventory(store: Persistence, office_id: str, matter_id: int | None) -> dict[str, object]:
+    root = store.get_active_workspace_root(office_id)
+    workspace_documents = store.list_workspace_documents(office_id, int(root["id"])) if root else []
+    matter_documents = store.list_matter_documents(office_id, matter_id) if matter_id else []
+    linked_workspace_documents = store.list_matter_workspace_documents(office_id, matter_id) if matter_id else []
+    drive_files = store.list_drive_files(office_id, limit=50)
+
+    seen_matter_keys: set[str] = set()
+    compact_matter_documents: list[dict[str, object]] = []
+    for item in (matter_documents or []) + (linked_workspace_documents or []):
+        label = _assistant_document_label(item)
+        key = f"{label}|{item.get('relative_path') or item.get('source_ref') or item.get('id') or item.get('workspace_document_id')}"
+        if key in seen_matter_keys:
+            continue
+        seen_matter_keys.add(key)
+        compact_matter_documents.append(
+            {
+                "label": label,
+                "status": item.get("ingest_status") or item.get("indexed_status") or "ready",
+            }
+        )
+
+    compact_workspace_documents = [
+        {
+            "label": _assistant_document_label(item),
+            "status": item.get("indexed_status") or item.get("ingest_status") or "ready",
+        }
+        for item in (workspace_documents or [])
+    ]
+    compact_drive_files = [
+        {
+            "label": str(item.get("name") or "Drive dosyası").strip(),
+            "status": "drive",
+            "mime_type": item.get("mime_type") or "",
+        }
+        for item in (drive_files or [])
+    ]
+
+    prompt_lines = ["Belge envanteri:"]
+    if root:
+        prompt_lines.append(
+            f"- Çalışma alanı: {_truncate_for_prompt(str(root.get('display_name') or root.get('root_path') or 'Çalışma alanı'), 140)}"
+        )
+    else:
+        prompt_lines.append("- Çalışma alanı seçili değil.")
+
+    prompt_lines.append("- Çalışma alanındaki son belgeler:")
+    for item in compact_workspace_documents[:8]:
+        prompt_lines.append(f"  - {item['label']} ({item['status']})")
+    if not compact_workspace_documents:
+        prompt_lines.append("  - Çalışma alanında belge görünmüyor.")
+
+    prompt_lines.append("- Google Drive son dosyaları:")
+    for item in compact_drive_files[:8]:
+        prompt_lines.append(f"  - {item['label']} ({item['status']})")
+    if not compact_drive_files:
+        prompt_lines.append("  - Google Drive tarafında dosya görünmüyor.")
+
+    if matter_id:
+        prompt_lines.append("- Etkin dosyadaki belgeler:")
+        for item in compact_matter_documents[:8]:
+            prompt_lines.append(f"  - {item['label']} ({item['status']})")
+        if not compact_matter_documents:
+            prompt_lines.append("  - Etkin dosyada belge görünmüyor.")
+
+    return {
+        "workspace_root_name": root.get("display_name") if root else None,
+        "workspace_count": len(compact_workspace_documents),
+        "workspace_documents": compact_workspace_documents[:8],
+        "google_drive_count": len(compact_drive_files),
+        "google_drive_files": compact_drive_files[:8],
+        "matter_count": len(compact_matter_documents),
+        "matter_documents": compact_matter_documents[:8],
+        "prompt_text": "\n".join(prompt_lines),
+    }
+
+
+def _is_document_inventory_query(query: str) -> bool:
+    normalized = " ".join(str(query or "").lower().split())
+    patterns = [
+        "elimde hangi belge",
+        "elimde hangi belgeler",
+        "hangi belge var",
+        "hangi belgeler var",
+        "belgeler neler",
+        "belge listesi",
+        "belge envanteri",
+        "hangi dosyalar var",
+        "hangi dokümanlar var",
+        "hangi dokumanlar var",
+    ]
+    return any(pattern in normalized for pattern in patterns)
+
+
+def _assistant_document_inventory_reply(document_inventory: dict[str, object], *, matter_id: int | None) -> str:
+    workspace_documents = list(document_inventory.get("workspace_documents") or [])
+    google_drive_files = list(document_inventory.get("google_drive_files") or [])
+    matter_documents = list(document_inventory.get("matter_documents") or [])
+    workspace_count = int(document_inventory.get("workspace_count") or 0)
+    google_drive_count = int(document_inventory.get("google_drive_count") or 0)
+    matter_count = int(document_inventory.get("matter_count") or 0)
+    workspace_root_name = str(document_inventory.get("workspace_root_name") or "").strip()
+
+    lines: list[str] = []
+    if matter_id:
+        if matter_count:
+            labels = ", ".join(str(item.get("label") or "Belge") for item in matter_documents[:6])
+            extra = max(0, matter_count - min(matter_count, 6))
+            sentence = f"Etkin dosyada {matter_count} belge görüyorum: {labels}"
+            lines.append(sentence + (f" ve {extra} belge daha." if extra else "."))
+        else:
+            lines.append("Etkin dosyada henüz kayıtlı belge görünmüyor.")
+
+    if workspace_count:
+        labels = ", ".join(str(item.get("label") or "Belge") for item in workspace_documents[:6])
+        extra = max(0, workspace_count - min(workspace_count, 6))
+        scope_label = workspace_root_name or "Çalışma alanında"
+        sentence = f"{scope_label} toplam {workspace_count} belge var: {labels}"
+        lines.append(sentence + (f" ve {extra} belge daha." if extra else "."))
+    elif workspace_root_name:
+        lines.append(f"{workspace_root_name} içinde henüz belge görünmüyor.")
+    else:
+        lines.append("Henüz seçili bir çalışma alanı görünmüyor, bu yüzden belge envanteri çıkaramıyorum.")
+
+    if google_drive_count:
+        labels = ", ".join(str(item.get("label") or "Drive dosyası") for item in google_drive_files[:6])
+        extra = max(0, google_drive_count - min(google_drive_count, 6))
+        sentence = f"Google Drive tarafında {google_drive_count} dosya görüyorum: {labels}"
+        lines.append(sentence + (f" ve {extra} dosya daha." if extra else "."))
+
+    if workspace_count or matter_count or google_drive_count:
+        lines.append("İstersen bunları türüne, dosyasına veya son güncellenene göre de sıralayabilirim.")
+    return " ".join(lines)
 
 
 def _build_similarity_explanation_prompt(*, source_document_name: str, items: list[dict], fallback_explanation: str) -> str:
@@ -724,6 +1370,8 @@ def _build_similarity_explanation_prompt(*, source_document_name: str, items: li
 def _google_status_payload(settings, store: Persistence) -> dict:
     account = store.get_connected_account(settings.office_id, "google")
     scopes = list(account.get("scopes") or settings.google_scopes) if account else list(settings.google_scopes)
+    account_status = str(account.get("status") or "").strip().lower() if account else ""
+    metadata = dict(account.get("metadata") or {}) if account else {}
     calendar_write_ready = any(
         scope in {
             "https://www.googleapis.com/auth/calendar.events",
@@ -731,17 +1379,36 @@ def _google_status_payload(settings, store: Persistence) -> dict:
         }
         for scope in scopes
     )
+    gmail_connected = bool(
+        settings.gmail_connected
+        or metadata.get("gmail_connected")
+        or any("gmail" in str(scope) for scope in scopes)
+        or len(store.list_email_threads(settings.office_id)) > 0
+    )
+    calendar_connected = bool(
+        settings.calendar_connected
+        or metadata.get("calendar_connected")
+        or any("calendar" in str(scope) for scope in scopes)
+        or len(store.list_calendar_events(settings.office_id, limit=10)) > 0
+    )
+    drive_connected = bool(
+        settings.drive_connected
+        or metadata.get("drive_connected")
+        or any("drive" in str(scope) for scope in scopes)
+        or len(store.list_drive_files(settings.office_id, limit=10)) > 0
+    )
+    configured = bool(settings.google_configured or account_status == "connected" or scopes)
     return {
         "provider": "google",
-        "configured": settings.google_configured,
-        "enabled": settings.google_enabled,
-        "account_label": settings.google_account_label,
+        "configured": configured,
+        "enabled": bool(settings.google_enabled or account),
+        "account_label": (account.get("account_label") if account else None) or settings.google_account_label,
         "scopes": scopes,
-        "gmail_connected": settings.gmail_connected,
-        "calendar_connected": settings.calendar_connected,
-        "drive_connected": settings.drive_connected,
+        "gmail_connected": gmail_connected,
+        "calendar_connected": calendar_connected,
+        "drive_connected": drive_connected,
         "calendar_write_ready": calendar_write_ready,
-        "status": account.get("status") if account else ("connected" if settings.google_configured else "pending"),
+        "status": account.get("status") if account else ("connected" if configured else "pending"),
         "email_thread_count": len(store.list_email_threads(settings.office_id)),
         "calendar_event_count": len(store.list_calendar_events(settings.office_id, limit=200)),
         "drive_file_count": len(store.list_drive_files(settings.office_id, limit=200)),
@@ -755,11 +1422,53 @@ def _telegram_status_payload(settings, store: Persistence) -> dict:
     account = store.get_connected_account(settings.office_id, "telegram")
     return {
         "provider": "telegram",
-        "configured": settings.telegram_configured,
-        "enabled": settings.telegram_enabled,
-        "account_label": settings.telegram_bot_username or "Telegram botu",
+        "configured": bool(settings.telegram_configured or (account and account.get("status") == "connected")),
+        "enabled": bool(settings.telegram_enabled or account),
+        "account_label": (account.get("account_label") if account else None) or settings.telegram_bot_username or "Telegram botu",
         "status": account.get("status") if account else ("connected" if settings.telegram_configured else "pending"),
         "allowed_user_id": settings.telegram_allowed_user_id,
+        "connected_account": account,
+        "desktop_managed": True,
+    }
+
+
+def _whatsapp_status_payload(settings, store: Persistence) -> dict:
+    account = store.get_connected_account(settings.office_id, "whatsapp")
+    message_count = len(store.list_whatsapp_messages(settings.office_id, limit=200))
+    metadata = dict(account.get("metadata") or {}) if account else {}
+    configured = bool(settings.whatsapp_configured or (account and account.get("status") == "connected"))
+    return {
+        "provider": "whatsapp",
+        "configured": configured,
+        "enabled": bool(settings.whatsapp_enabled or account),
+        "account_label": (account.get("account_label") if account else None) or settings.whatsapp_account_label or "WhatsApp hesabı",
+        "phone_number_id": settings.whatsapp_phone_number_id or metadata.get("phone_number_id") or "",
+        "display_phone_number": settings.whatsapp_display_phone_number or metadata.get("display_phone_number") or "",
+        "status": account.get("status") if account else ("connected" if configured else "pending"),
+        "message_count": message_count,
+        "last_sync_at": account.get("last_sync_at") if account else None,
+        "connected_account": account,
+        "desktop_managed": True,
+    }
+
+
+def _x_status_payload(settings, store: Persistence) -> dict:
+    account = store.get_connected_account(settings.office_id, "x")
+    mentions = store.list_x_posts(settings.office_id, post_type="mention", limit=200)
+    posts = store.list_x_posts(settings.office_id, post_type="post", limit=200)
+    configured = bool(settings.x_configured or (account and account.get("status") == "connected"))
+    scopes = list(account.get("scopes") or settings.x_scopes) if account else list(settings.x_scopes)
+    return {
+        "provider": "x",
+        "configured": configured,
+        "enabled": bool(settings.x_enabled or account),
+        "account_label": (account.get("account_label") if account else None) or settings.x_account_label or "X hesabı",
+        "user_id": settings.x_user_id or (dict(account.get("metadata") or {}).get("user_id") if account else "") or "",
+        "scopes": scopes,
+        "status": account.get("status") if account else ("connected" if configured else "pending"),
+        "mention_count": len(mentions),
+        "post_count": len(posts),
+        "last_sync_at": account.get("last_sync_at") if account else None,
         "connected_account": account,
         "desktop_managed": True,
     }
@@ -926,7 +1635,13 @@ def _generate_assistant_action_output(
     events: StructuredLogger,
 ) -> dict:
     matter = store.get_matter(int(payload.matter_id), settings.office_id) if payload.matter_id else None
-    target_channel = payload.target_channel or ("telegram" if payload.action_type == "send_telegram_message" else "email")
+    default_channel_map = {
+        "send_telegram_message": "telegram",
+        "send_whatsapp_message": "whatsapp",
+        "post_x_update": "x",
+        "reserve_travel_ticket": "travel",
+    }
+    target_channel = payload.target_channel or default_channel_map.get(payload.action_type, "email")
     title = payload.title or (
         f"{matter['title']} için müvekkil güncellemesi" if matter and payload.action_type == "prepare_client_update" else "Asistan taslağı"
     )
@@ -995,6 +1710,51 @@ def _generate_assistant_action_output(
             "Merhaba,\n\nMesajınızı inceledim. İlgili dosya ve mevcut kayıtlar üzerinden kısa bir çalışma yanıtı hazırladım."
             "\n\nUygun görürseniz bunu gözden geçirip gönderebiliriz."
         )
+    elif payload.action_type == "send_email":
+        title = payload.title or "Asistan e-postası"
+        runtime_prompt = "\n".join(
+            [
+                "LawCopilot için gönderime hazır kısa bir e-posta gövdesi yaz.",
+                "Kurallar:",
+                "- Türkçe yaz.",
+                "- Sadece e-posta gövdesini yaz; konu satırı yazma.",
+                "- Profesyonel ve doğal ol.",
+                "- Gereksiz açıklama ekleme.",
+                "",
+                f"Alıcı: {payload.to_contact or 'belirtilmedi'}",
+                f"Konu: {title}",
+                f"Kullanıcı isteği: {payload.instructions or 'Kısa bir e-posta hazırla.'}",
+                "",
+                "Kullanıcı profili:",
+                *(_profile_summary_lines(store.get_user_profile(settings.office_id)) or ["- Belirgin kullanıcı tercihi kaydı yok."]),
+            ]
+        )
+        runtime_completion = _maybe_runtime_completion(
+            runtime,
+            runtime_prompt,
+            events,
+            task="assistant_email_draft_generate",
+            subject=subject,
+            matter_id=payload.matter_id,
+        )
+        if runtime_completion:
+            body = runtime_completion["text"]
+            generated_from = _runtime_generated_from(
+                runtime_completion,
+                direct_label="direct_provider+assistant_actions",
+                advanced_label="openclaw_runtime+assistant_actions",
+                fallback_label="assistant_agenda_engine",
+            )
+            ai_provider = runtime_completion["provider"]
+            ai_model = runtime_completion["model"]
+        else:
+            body = payload.instructions or "Merhaba, kısa bir bilgilendirme paylaşmak istedim."
+    elif payload.action_type == "send_whatsapp_message":
+        body = payload.instructions or "Merhaba, kısa bir bilgilendirme ve geri dönüş talebi içeren WhatsApp mesajı taslağı hazırladım."
+    elif payload.action_type == "post_x_update":
+        body = payload.instructions or "Kısa, profesyonel ve paylaşmaya hazır bir X gönderi taslağı hazırladım."
+    elif payload.action_type == "reserve_travel_ticket":
+        body = payload.instructions or "Seyahat arama ve rezervasyon için onay bekleyen kısa bir hazırlık özeti oluşturdum."
 
     draft = store.create_outbound_draft(
         settings.office_id,
@@ -1064,11 +1824,134 @@ def _require_active_workspace_document(store: Persistence, office_id: str, docum
     return root, record
 
 
+_EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+
+
+def _compact_inline_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _extract_recent_email_context(query: str, recent_messages: list[dict] | None) -> dict[str, str] | None:
+    candidate_texts: list[str] = []
+    query_text = _compact_inline_text(query)
+    if query_text:
+        candidate_texts.append(query_text)
+
+    normalized = query_text.lower()
+    should_scan_history = any(
+        token in normalized
+        for token in [
+            "bu mail",
+            "bu e-posta",
+            "bu eposta",
+            "maili",
+            "taslak",
+            "taslağa",
+            "taslaga",
+            "gönder",
+        ]
+    )
+    draft_preview_context: dict[str, str] | None = None
+    if should_scan_history and recent_messages:
+        for item in reversed(recent_messages):
+            role = str(item.get("role") or "")
+            content = _compact_inline_text(str(item.get("content") or ""))
+            draft_preview = item.get("draft_preview") if isinstance(item.get("draft_preview"), dict) else None
+            if draft_preview and not draft_preview_context:
+                draft_to = _compact_inline_text(str(draft_preview.get("to_contact") or ""))
+                draft_subject = _compact_inline_text(str(draft_preview.get("subject") or ""))
+                draft_body = _compact_inline_text(str(draft_preview.get("body") or ""))
+                if draft_to:
+                    draft_preview_context = {
+                        "to_contact": draft_to,
+                        "subject": draft_subject or "Kısa mesaj",
+                        "body": draft_body or "Merhaba, sana kısa bir mesaj iletmek istedim. Uygun olduğunda dönüşünü bekliyorum.",
+                    }
+            if content:
+                plain_content = re.sub(r"[*_`]+", "", content)
+                if role == "assistant":
+                    to_match = re.search(r"(?:alıcı|alici)\s*[:：]\s*([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})", plain_content, re.IGNORECASE)
+                    subject_match = re.search(r"(?:konu|başlık|baslik)\s*[:：]\s*[\"“']?([^\"”'\n|]+)", plain_content, re.IGNORECASE)
+                    body_match = re.search(r"(?:metin|içerik|icerik|mesaj)\s*[:：]\s*[\"“']?(.+?)(?:”|\"|$)", plain_content, re.IGNORECASE)
+                    if to_match:
+                        assistant_email_context = " ".join(
+                            part for part in [
+                                to_match.group(1),
+                                f"Konu: {_compact_inline_text(subject_match.group(1))}" if subject_match else "",
+                                f"Metin: {_compact_inline_text(body_match.group(1))}" if body_match else "",
+                            ] if part
+                        )
+                        if assistant_email_context:
+                            candidate_texts.append(assistant_email_context)
+                    elif any(token in plain_content.lower() for token in ["mail", "e-posta", "eposta", "konu", "başlık", "mesaj", "selam"]):
+                        candidate_texts.append(plain_content)
+                elif "@" in content or any(token in content.lower() for token in ["mail", "e-posta", "eposta", "konu", "başlık", "mesaj", "selam"]):
+                    candidate_texts.append(content)
+            if len(candidate_texts) >= 4:
+                break
+
+    if draft_preview_context:
+        return draft_preview_context
+
+    if not candidate_texts:
+        return None
+
+    merged = " ".join(candidate_texts)
+    emails = _EMAIL_PATTERN.findall(merged)
+    if not emails:
+        return None
+
+    explicit_subject = ""
+    for text in candidate_texts:
+        match = re.search(r"(?:konu|başlık)\s*[:：]\s*[\"“']?([^\"”'\n]+)", text, re.IGNORECASE)
+        if match:
+            explicit_subject = _compact_inline_text(match.group(1))
+            break
+
+    explicit_body = ""
+    for text in candidate_texts:
+        match = re.search(r"(?:mesaj|içerik|metin)\s*[:：]\s*(.+)$", text, re.IGNORECASE)
+        if match:
+            explicit_body = _compact_inline_text(match.group(1))
+            break
+
+    lower = merged.lower()
+    fallback_subject = explicit_subject
+    fallback_body = explicit_body
+    if not fallback_subject:
+        if "selam" in lower:
+            fallback_subject = "Selam"
+        elif "teşekkür" in lower:
+            fallback_subject = "Teşekkür"
+        elif "hatırlat" in lower:
+            fallback_subject = "Hatırlatma"
+        else:
+            fallback_subject = "Kısa mesaj"
+
+    if not fallback_body:
+        if "selam" in lower:
+            fallback_body = "Merhaba, sana selamımı iletmek istedim. İyi günler dilerim."
+        elif "teşekkür" in lower:
+            fallback_body = "Merhaba, desteğin için teşekkür ederim. İyi günler dilerim."
+        elif "hatırlat" in lower:
+            fallback_body = "Merhaba, kısa bir hatırlatma paylaşmak istedim. Uygun olduğunda dönüşünü bekliyorum."
+        else:
+            fallback_body = "Merhaba, sana kısa bir mesaj iletmek istedim. Uygun olduğunda dönüşünü bekliyorum."
+
+    return {
+        "to_contact": emails[0],
+        "subject": fallback_subject,
+        "body": fallback_body,
+        "source_text": candidate_texts[-1],
+    }
+
+
 def _compose_assistant_thread_reply(
     *,
     query: str,
     matter_id: int | None,
     source_refs: list[dict] | None,
+    recent_messages: list[dict] | None,
     subject: str,
     settings,
     store: Persistence,
@@ -1080,17 +1963,27 @@ def _compose_assistant_thread_reply(
     agenda = build_assistant_agenda(store, settings.office_id)
     inbox = build_assistant_inbox(store, settings.office_id)
     calendar = build_assistant_calendar(store, settings.office_id)
+    document_inventory = _assistant_document_inventory(store, settings.office_id, matter_id)
     tool_suggestions = _assistant_tool_suggestions(query, requires_setup=home.get("requires_setup") or [])
+    profile = store.get_user_profile(settings.office_id)
     linked_entities: list[dict] = []
     if matter_id:
         matter = store.get_matter(matter_id, settings.office_id)
         if matter:
             linked_entities.append({"type": "matter", "id": matter_id, "label": matter.get("title")})
     linked_entities.extend(_assistant_source_ref_entities(source_refs))
-    if settings.google_configured:
-        linked_entities.append({"type": "integration", "id": "google", "label": settings.google_account_label or "Google"})
-    if settings.telegram_configured:
-        linked_entities.append({"type": "integration", "id": "telegram", "label": settings.telegram_bot_username or "Telegram"})
+    google_status = _google_status_payload(settings, store)
+    telegram_status = _telegram_status_payload(settings, store)
+    whatsapp_status = _whatsapp_status_payload(settings, store)
+    x_status = _x_status_payload(settings, store)
+    if google_status.get("configured"):
+        linked_entities.append({"type": "integration", "id": "google", "label": google_status.get("account_label") or "Google"})
+    if telegram_status.get("configured"):
+        linked_entities.append({"type": "integration", "id": "telegram", "label": telegram_status.get("account_label") or "Telegram"})
+    if whatsapp_status.get("configured"):
+        linked_entities.append({"type": "integration", "id": "whatsapp", "label": whatsapp_status.get("account_label") or "WhatsApp"})
+    if x_status.get("configured"):
+        linked_entities.append({"type": "integration", "id": "x", "label": x_status.get("account_label") or "X"})
 
     normalized = query.lower()
     pending_calendar = _extract_calendar_candidate(query)
@@ -1121,16 +2014,125 @@ def _compose_assistant_thread_reply(
                 },
             },
         }
+    if _is_document_inventory_query(query):
+        return {
+            "content": _assistant_document_inventory_reply(document_inventory, matter_id=matter_id),
+            "assistant_summary": home.get("today_summary") or "",
+            "tool_suggestions": _assistant_tool_suggestions("belge", requires_setup=home.get("requires_setup") or []),
+            "linked_entities": linked_entities,
+            "draft_preview": None,
+            "requires_approval": False,
+            "generated_from": "assistant_document_inventory",
+            "ai_provider": None,
+            "ai_model": None,
+            "source_context": {
+                "priority_items": home.get("priority_items") or [],
+                "requires_setup": home.get("requires_setup") or [],
+                "source_refs": source_refs or [],
+                "document_inventory": document_inventory,
+            },
+        }
+    if is_web_search_query(query) and not is_travel_query(query):
+        web_context = build_web_search_context(query)
+        results = list(web_context.get("results") or [])
+        if results:
+            lines = ["Web'de şu sonuçları buldum:"]
+            for index, item in enumerate(results[:4], start=1):
+                title = str(item.get("title") or "Sonuç")
+                snippet = str(item.get("snippet") or "").strip()
+                url = str(item.get("url") or "").strip()
+                row = f"{index}. {title}"
+                if snippet:
+                    row += f" — {snippet}"
+                if url:
+                    row += f" ({url})"
+                lines.append(row)
+            lines.append("İstersen bunları daraltıp en güçlü olanları senin için özetleyeyim.")
+            content = "\n".join(lines)
+        else:
+            content = "Şu an web'de güvenilir bir sonuç toplayamadım. İstersen sorguyu biraz daha netleştir ve tekrar bakayım."
+        return {
+            "content": content,
+            "assistant_summary": home.get("today_summary") or "",
+            "tool_suggestions": [{"tool": "runtime", "label": "Durum", "reason": "Güncel araştırma ve dış kaynak desteği burada özetlenir."}],
+            "linked_entities": linked_entities,
+            "draft_preview": None,
+            "requires_approval": False,
+            "generated_from": "assistant_web_search",
+            "ai_provider": None,
+            "ai_model": None,
+            "source_context": {
+                "priority_items": home.get("priority_items") or [],
+                "requires_setup": home.get("requires_setup") or [],
+                "source_refs": source_refs or [],
+                "web_search_results": results,
+            },
+        }
+    if is_travel_query(query) and not is_travel_booking_query(query):
+        travel_context = build_travel_context(query, profile_note=_profile_preference_text(profile))
+        results = list(travel_context.get("results") or [])
+        booking_url = str(travel_context.get("booking_url") or "").strip()
+        content_lines = []
+        if results:
+            content_lines.append("Seyahat için ilk seçenekleri topladım:")
+            for index, item in enumerate(results[:3], start=1):
+                line = f"{index}. {item.get('title') or 'Seçenek'}"
+                if item.get("snippet"):
+                    line += f" — {item.get('snippet')}"
+                if item.get("url"):
+                    line += f" ({item.get('url')})"
+                content_lines.append(line)
+        if booking_url:
+            content_lines.append("Uygun görürsen onayından sonra rezervasyon sayfasını açabilirim.")
+        else:
+            content_lines.append("Tarih, rota ve bütçeyi netleştirirsen daha iyi seçenek çıkarabilirim.")
+        return {
+            "content": "\n".join(content_lines),
+            "assistant_summary": home.get("today_summary") or "",
+            "tool_suggestions": [{"tool": "calendar", "label": "Takvim", "reason": "Seyahat önerisini takvim boşluğunla birlikte değerlendiriyorum."}],
+            "linked_entities": linked_entities,
+            "draft_preview": None,
+            "requires_approval": False,
+            "generated_from": "assistant_travel_search",
+            "ai_provider": None,
+            "ai_model": None,
+            "source_context": {
+                "priority_items": home.get("priority_items") or [],
+                "requires_setup": home.get("requires_setup") or [],
+                "source_refs": source_refs or [],
+                "travel_options": results,
+                "booking_url": booking_url,
+            },
+        }
     action_result = None
-    if any(token in normalized for token in ["mail hazırla", "e-posta hazırla", "mail gönder", "e-posta gönder", "yanıtla"]):
-        if matter_id:
-            action_type = "reply_email" if "yanıt" in normalized else "prepare_client_update"
+    if any(
+        token in normalized
+        for token in [
+            "mail hazırla",
+            "e-posta hazırla",
+            "mail gönder",
+            "e-posta gönder",
+            "yanıtla",
+            "taslaklarda",
+            "taslağa",
+            "taslaga",
+            "bu maili",
+            "bu e-postayı",
+            "bu epostayı",
+            "maili",
+        ]
+    ):
+        email_context = _extract_recent_email_context(query, recent_messages)
+        if email_context or matter_id:
+            action_type = "reply_email" if "yanıt" in normalized else ("send_email" if email_context or not matter_id else "prepare_client_update")
             action_result = _generate_assistant_action_output(
                 payload=AssistantActionGenerateRequest(
                     action_type=action_type,
                     matter_id=matter_id,
-                    instructions=query,
+                    title=(email_context or {}).get("subject"),
+                    instructions=(email_context or {}).get("body") or query,
                     target_channel="email",
+                    to_contact=(email_context or {}).get("to_contact"),
                     source_refs=source_refs,
                 ),
                 subject=subject,
@@ -1157,6 +2159,64 @@ def _compose_assistant_thread_reply(
                 events=events,
             )
             tool_suggestions = _assistant_tool_suggestions("taslak", requires_setup=home.get("requires_setup") or [])
+    elif any(token in normalized for token in ["whatsapp", "whatsapptan", "whatsapp'tan"]):
+        action_result = _generate_assistant_action_output(
+            payload=AssistantActionGenerateRequest(
+                action_type="send_whatsapp_message",
+                matter_id=matter_id,
+                instructions=query,
+                target_channel="whatsapp",
+                source_refs=source_refs,
+            ),
+            subject=subject,
+            settings=settings,
+            store=store,
+            runtime=runtime,
+            events=events,
+        )
+        tool_suggestions = _assistant_tool_suggestions("taslak", requires_setup=home.get("requires_setup") or [])
+    elif any(token in normalized for token in ["x'te", "x te", "tweet", "gönderi paylaş", "post paylaş"]):
+        action_result = _generate_assistant_action_output(
+            payload=AssistantActionGenerateRequest(
+                action_type="post_x_update",
+                matter_id=matter_id,
+                instructions=query,
+                target_channel="x",
+                source_refs=source_refs,
+            ),
+            subject=subject,
+            settings=settings,
+            store=store,
+            runtime=runtime,
+            events=events,
+        )
+        tool_suggestions = _assistant_tool_suggestions("taslak", requires_setup=home.get("requires_setup") or [])
+    elif is_travel_booking_query(query):
+        travel_context = build_travel_context(query, profile_note=_profile_preference_text(profile))
+        travel_source_refs = list(source_refs or [])
+        if travel_context.get("booking_url"):
+            travel_source_refs.append(
+                {
+                    "type": "booking_url",
+                    "label": "Rezervasyon bağlantısı",
+                    "url": travel_context.get("booking_url"),
+                }
+            )
+        action_result = _generate_assistant_action_output(
+            payload=AssistantActionGenerateRequest(
+                action_type="reserve_travel_ticket",
+                matter_id=matter_id,
+                instructions=query,
+                target_channel="travel",
+                source_refs=travel_source_refs,
+            ),
+            subject=subject,
+            settings=settings,
+            store=store,
+            runtime=runtime,
+            events=events,
+        )
+        tool_suggestions = _assistant_tool_suggestions("takvim", requires_setup=home.get("requires_setup") or [])
 
     fallback_text: str
     is_casual_prompt = any(token in normalized for token in ["merhaba", "selam", "naber", "nabuyon", "napıyon", "napiyon", "ne yapıyorsun", "nasılsın"])
@@ -1173,6 +2233,7 @@ def _compose_assistant_thread_reply(
             f"İlk odak alanı olarak {focus_tool} sekmesini öne çıkarıyorum."
         )
         if is_casual_prompt:
+            tool_suggestions = []
             fallback_text = (
                 "Buradayım. Çalışma alanınızı, ajandanızı ve bağlı hizmetleri izliyorum. "
                 "İsterseniz bugün yapılacakları çıkarayım, bir dosyayı inceleyeyim veya bir iletişim taslağı hazırlayayım."
@@ -1198,6 +2259,8 @@ def _compose_assistant_thread_reply(
             *_assistant_source_ref_lines(source_refs),
             "",
             _assistant_home_context_text(home, agenda, inbox, calendar[:5]),
+            "",
+            str(document_inventory.get("prompt_text") or "Belge envanteri görünmüyor."),
             "",
             "Önerilecek araçlar:",
             *[f"- {item['label']}: {item['reason']}" for item in tool_suggestions],
@@ -1234,13 +2297,14 @@ def _compose_assistant_thread_reply(
         ),
         "ai_provider": runtime_completion["provider"] if runtime_completion else (action_result.get("ai_provider") if action_result else None),
         "ai_model": runtime_completion["model"] if runtime_completion else (action_result.get("ai_model") if action_result else None),
-        "source_context": {
-            "priority_items": home.get("priority_items") or [],
-            "requires_setup": home.get("requires_setup") or [],
-            "source_refs": source_refs or [],
-            "assistant_action": action_result["action"] if action_result else None,
-        },
-    }
+            "source_context": {
+                "priority_items": home.get("priority_items") or [],
+                "requires_setup": home.get("requires_setup") or [],
+                "source_refs": source_refs or [],
+                "document_inventory": document_inventory,
+                "assistant_action": action_result["action"] if action_result else None,
+            },
+        }
 
 
 def _extract_context(
@@ -1679,6 +2743,16 @@ def create_app() -> FastAPI:
         require_role("intern", role)
         return _openclaw_workspace_status(sync=True, include_previews=True)
 
+    @app.get("/assistant/onboarding/state")
+    def get_assistant_onboarding_state(
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        _, role, _ = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        sync_connected_accounts_from_settings(settings, store)
+        return _assistant_onboarding_state(settings, store)
+
     @app.put("/profile")
     def save_user_profile(
         payload: UserProfileRequest,
@@ -1690,6 +2764,7 @@ def create_app() -> FastAPI:
         profile = store.upsert_user_profile(
             settings.office_id,
             display_name=payload.display_name,
+            favorite_color=payload.favorite_color,
             food_preferences=payload.food_preferences,
             transport_preference=payload.transport_preference,
             weather_preference=payload.weather_preference,
@@ -1697,13 +2772,33 @@ def create_app() -> FastAPI:
             communication_style=payload.communication_style,
             assistant_notes=payload.assistant_notes,
             important_dates=[item.model_dump() for item in payload.important_dates],
+            related_profiles=[item.model_dump() for item in payload.related_profiles],
         )
         _openclaw_workspace_status(sync=True)
-        audit.log("user_profile_updated", subject=subject, role=role, session_id=sid, important_date_count=len(payload.important_dates))
+        audit.log(
+            "user_profile_updated",
+            subject=subject,
+            role=role,
+            session_id=sid,
+            important_date_count=len(payload.important_dates),
+            related_profile_count=len(payload.related_profiles),
+        )
         return {
             "profile": profile,
             "message": "Kişisel profil kaydedildi.",
         }
+
+    @app.get("/assistant/onboarding")
+    def get_assistant_onboarding(
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        _, role, _ = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        state = _assistant_onboarding_state(settings, store)
+        state["user_profile"] = store.get_user_profile(settings.office_id)
+        state["assistant_runtime_profile"] = store.get_assistant_runtime_profile(settings.office_id)
+        return state
 
     @app.get("/integrations/google/status")
     def get_google_status(
@@ -1714,6 +2809,22 @@ def create_app() -> FastAPI:
         require_role("intern", role)
         sync_connected_accounts_from_settings(settings, store)
         return _google_status_payload(settings, store)
+
+    @app.get("/integrations/google/drive-files")
+    def list_google_drive_files(
+        limit: int = 30,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        _, role, _ = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        sync_connected_accounts_from_settings(settings, store)
+        return {
+            "configured": settings.google_configured,
+            "connected": settings.drive_connected,
+            "items": store.list_drive_files(settings.office_id, limit=max(1, min(limit, 100))),
+            "generated_from": "google_drive_mirror",
+        }
 
     @app.post("/integrations/google/oauth/start")
     def start_google_oauth(
@@ -1831,6 +2942,148 @@ def create_app() -> FastAPI:
             },
         }
 
+    @app.get("/integrations/whatsapp/status")
+    def get_whatsapp_status(
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        _, role, _ = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        sync_connected_accounts_from_settings(settings, store)
+        return _whatsapp_status_payload(settings, store)
+
+    @app.post("/integrations/whatsapp/sync")
+    def sync_whatsapp_data(
+        payload: WhatsAppSyncRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        synced_at = payload.synced_at.isoformat() if payload.synced_at else datetime.now(timezone.utc).isoformat()
+        store.upsert_connected_account(
+            settings.office_id,
+            "whatsapp",
+            account_label=payload.account_label or payload.verified_name or payload.display_phone_number or "WhatsApp hesabı",
+            status="connected",
+            scopes=["messages:read", "messages:send"],
+            connected_at=synced_at,
+            last_sync_at=synced_at,
+            manual_review_required=True,
+            metadata={
+                "phone_number_id": payload.phone_number_id,
+                "display_phone_number": payload.display_phone_number,
+                "verified_name": payload.verified_name,
+                "note": payload.note,
+                "message_count": len(payload.messages),
+            },
+        )
+        for message in payload.messages:
+            store.upsert_whatsapp_message(
+                settings.office_id,
+                provider=message.provider,
+                conversation_ref=message.conversation_ref,
+                message_ref=message.message_ref,
+                sender=message.sender,
+                recipient=message.recipient,
+                body=message.body,
+                direction=message.direction,
+                sent_at=message.sent_at.isoformat() if message.sent_at else None,
+                reply_needed=bool(message.reply_needed),
+                matter_id=message.matter_id,
+                metadata=message.metadata or {},
+            )
+        audit.log(
+            "whatsapp_sync_completed",
+            subject=subject,
+            role=role,
+            session_id=sid,
+            message_count=len(payload.messages),
+        )
+        return {
+            "ok": True,
+            "message": "WhatsApp verileri yerel kayıtlarla eşitlendi.",
+            "status": _whatsapp_status_payload(settings, store),
+            "synced": {
+                "messages": len(payload.messages),
+                "synced_at": synced_at,
+                "note": payload.note or "",
+            },
+        }
+
+    @app.get("/integrations/x/status")
+    def get_x_status(
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        _, role, _ = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        sync_connected_accounts_from_settings(settings, store)
+        return _x_status_payload(settings, store)
+
+    @app.post("/integrations/x/sync")
+    def sync_x_data(
+        payload: XSyncRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("intern", role)
+        synced_at = payload.synced_at.isoformat() if payload.synced_at else datetime.now(timezone.utc).isoformat()
+        store.upsert_connected_account(
+            settings.office_id,
+            "x",
+            account_label=payload.account_label or "X hesabı",
+            status="connected",
+            scopes=payload.scopes or [],
+            connected_at=synced_at,
+            last_sync_at=synced_at,
+            manual_review_required=True,
+            metadata={"user_id": payload.user_id, "mention_count": len(payload.mentions), "post_count": len(payload.posts)},
+        )
+        for mention in payload.mentions:
+            store.upsert_x_post(
+                settings.office_id,
+                provider=mention.provider,
+                external_id=mention.external_id,
+                post_type="mention",
+                author_handle=mention.author_handle,
+                content=mention.content,
+                posted_at=mention.posted_at.isoformat() if mention.posted_at else None,
+                reply_needed=bool(mention.reply_needed),
+                metadata=mention.metadata or {},
+            )
+        for post in payload.posts:
+            store.upsert_x_post(
+                settings.office_id,
+                provider=post.provider,
+                external_id=post.external_id,
+                post_type=post.post_type,
+                author_handle=post.author_handle,
+                content=post.content,
+                posted_at=post.posted_at.isoformat() if post.posted_at else None,
+                reply_needed=bool(post.reply_needed),
+                metadata=post.metadata or {},
+            )
+        audit.log(
+            "x_sync_completed",
+            subject=subject,
+            role=role,
+            session_id=sid,
+            mention_count=len(payload.mentions),
+            post_count=len(payload.posts),
+        )
+        return {
+            "ok": True,
+            "message": "X verileri yerel kayıtlarla eşitlendi.",
+            "status": _x_status_payload(settings, store),
+            "synced": {
+                "mentions": len(payload.mentions),
+                "posts": len(payload.posts),
+                "synced_at": synced_at,
+            },
+        }
+
     @app.post("/assistant/calendar/events")
     def create_assistant_calendar_event(
         payload: AssistantCalendarEventCreateRequest,
@@ -1900,6 +3153,8 @@ def create_app() -> FastAPI:
             "approval_required": True,
             "google_status": _google_status_payload(settings, store),
             "telegram_status": _telegram_status_payload(settings, store),
+            "whatsapp_status": _whatsapp_status_payload(settings, store),
+            "x_status": _x_status_payload(settings, store),
             "runtime_enabled": llm_service.enabled,
             "assistant_runtime_mode": llm_service.runtime_mode,
         }
@@ -1925,7 +3180,7 @@ def create_app() -> FastAPI:
         subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
         require_role("intern", role)
         sync_connected_accounts_from_settings(settings, store)
-        home = build_assistant_home(store, settings.office_id)
+        home = _assistant_home_payload(settings, store)
         audit.log("assistant_home_viewed", subject=subject, role=role, session_id=sid, priority_count=len(home.get("priority_items", [])))
         return home
 
@@ -1962,7 +3217,8 @@ def create_app() -> FastAPI:
             "messages": messages,
             "has_more": has_more,
             "total_count": total_count,
-            "assistant_summary": build_assistant_home(store, settings.office_id).get("today_summary"),
+            "assistant_summary": build_assistant_home(store, settings.office_id, settings=settings).get("today_summary"),
+            "onboarding": _assistant_onboarding_state(settings, store),
             "generated_from": "assistant_thread_memory",
         }
 
@@ -1974,8 +3230,9 @@ def create_app() -> FastAPI:
     ):
         subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
         require_role("intern", role)
+        sync_connected_accounts_from_settings(settings, store)
         thread = store.get_or_create_assistant_thread(settings.office_id, created_by=subject)
-        prior_messages = store.list_assistant_messages(settings.office_id, thread_id=int(thread["id"]), limit=6)
+        prior_messages = store.list_assistant_messages(settings.office_id, thread_id=int(thread["id"]), limit=24)
         linked_entities = ([{"type": "matter", "id": payload.matter_id}] if payload.matter_id else []) + _assistant_source_ref_entities(payload.source_refs)
         store.append_assistant_message(
             settings.office_id,
@@ -1988,7 +3245,9 @@ def create_app() -> FastAPI:
         )
         pending_calendar = _pending_calendar_event(prior_messages)
         normalized_query = payload.content.strip()
+        onboarding_before = _assistant_onboarding_state(settings, store)
         memory_updates = memory_service.capture_chat_signal(normalized_query)
+        onboarding_after = _assistant_onboarding_state(settings, store)
         if pending_calendar and _is_calendar_confirmation(normalized_query):
             provider = "lawcopilot-planner"
             external_id = f"{provider}-{int(time.time() * 1000)}"
@@ -2009,7 +3268,7 @@ def create_app() -> FastAPI:
             )
             reply = {
                 "content": f'"{created_event.get("title")}" kaydını {_format_turkish_datetime(created_event["starts_at"])} için takvime ekledim.',
-                "assistant_summary": build_assistant_home(store, settings.office_id).get("today_summary") or "",
+                "assistant_summary": build_assistant_home(store, settings.office_id, settings=settings).get("today_summary") or "",
                 "tool_suggestions": _assistant_tool_suggestions("takvim"),
                 "linked_entities": linked_entities + [{"type": "calendar_event", "id": created_event.get("id"), "label": created_event.get("title")}],
                 "draft_preview": None,
@@ -2025,7 +3284,7 @@ def create_app() -> FastAPI:
         elif pending_calendar and _is_calendar_rejection(normalized_query):
             reply = {
                 "content": "Tamam, bu kaydı takvime eklemiyorum.",
-                "assistant_summary": build_assistant_home(store, settings.office_id).get("today_summary") or "",
+                "assistant_summary": build_assistant_home(store, settings.office_id, settings=settings).get("today_summary") or "",
                 "tool_suggestions": _assistant_tool_suggestions("takvim"),
                 "linked_entities": linked_entities,
                 "draft_preview": None,
@@ -2038,17 +3297,37 @@ def create_app() -> FastAPI:
                     "dismissed_calendar_event": pending_calendar,
                 },
             }
+        elif memory_updates:
+            reply = _compose_assistant_onboarding_reply(
+                normalized_query,
+                home=_assistant_home_payload(settings, store),
+                onboarding_state=onboarding_after,
+                memory_updates=memory_updates,
+            )
+        elif _is_onboarding_turn(normalized_query, prior_messages, onboarding_before):
+            reply = _compose_assistant_onboarding_reply(
+                normalized_query,
+                home=_assistant_home_payload(settings, store),
+                onboarding_state=onboarding_after,
+                memory_updates=memory_updates,
+            )
         else:
             reply = _compose_assistant_thread_reply(
                 query=normalized_query,
                 matter_id=payload.matter_id,
                 source_refs=payload.source_refs,
+                recent_messages=prior_messages,
                 subject=subject,
                 settings=settings,
                 store=store,
                 runtime=runtime,
                 events=events,
             )
+            reply["content"] = _append_onboarding_followup(reply["content"], onboarding_after, memory_updates=memory_updates)
+            reply["source_context"] = {
+                **(reply.get("source_context") or {}),
+                "onboarding": onboarding_after,
+            }
         response_extensions = build_thread_response_extensions(
             reply=reply,
             generated_from=str(reply.get("generated_from") or ""),
@@ -2087,6 +3366,7 @@ def create_app() -> FastAPI:
             "generated_from": reply["generated_from"],
             "ai_provider": reply["ai_provider"],
             "ai_model": reply["ai_model"],
+            "onboarding": onboarding_after,
             **response_extensions,
         }
 
@@ -2208,6 +3488,16 @@ def create_app() -> FastAPI:
                 approval_status="approved",
                 delivery_status="ready_to_send" if not settings.connector_dry_run else "manual_review_only",
                 approved_by=subject,
+                dispatch_state="ready" if not settings.connector_dry_run else "idle",
+                dispatch_error=None,
+            )
+            action = store.update_assistant_action_status(
+                settings.office_id,
+                action_id,
+                "approved",
+                draft_id=int(draft["id"]),
+                dispatch_state="ready" if not settings.connector_dry_run else "idle",
+                dispatch_error=None,
             )
         store.add_approval_event(
             settings.office_id,
@@ -2337,24 +3627,56 @@ def create_app() -> FastAPI:
         draft = store.get_outbound_draft(settings.office_id, draft_id)
         if not draft:
             raise HTTPException(status_code=404, detail="Taslak bulunamadı.")
+        if str(draft.get("delivery_status")) == "sent" or str(draft.get("dispatch_state")) == "completed":
+            raise HTTPException(status_code=409, detail="Taslak zaten gönderildi.")
+        linked_action = store.get_assistant_action_by_draft_id(settings.office_id, draft_id)
+        action_id = int(linked_action["id"]) if linked_action and linked_action.get("id") else None
         if str(draft.get("approval_status")) != "approved":
-            raise HTTPException(status_code=409, detail="Taslak gönderilmeden önce onaylanmalıdır.")
+            draft = store.update_outbound_draft(
+                settings.office_id,
+                draft_id,
+                approval_status="approved",
+                delivery_status="ready_to_send" if not settings.connector_dry_run else "manual_review_only",
+                approved_by=subject,
+                dispatch_state="ready" if not settings.connector_dry_run else "idle",
+                dispatch_error=None,
+            )
+            if linked_action and action_id:
+                linked_action = store.update_assistant_action_status(
+                    settings.office_id,
+                    action_id,
+                    "approved",
+                    draft_id=draft_id,
+                    dispatch_state="ready" if not settings.connector_dry_run else "idle",
+                    dispatch_error=None,
+                )
+            store.add_approval_event(
+                settings.office_id,
+                actor=subject,
+                event_type="approved",
+                action_id=action_id,
+                outbound_draft_id=draft_id,
+                note=payload.note or "Taslak panelinden onaylandı.",
+            )
         if settings.connector_dry_run:
             updated = store.update_outbound_draft(
                 settings.office_id,
                 draft_id,
                 delivery_status="manual_review_only",
                 approved_by=subject,
+                dispatch_state="idle",
             )
             store.add_approval_event(
                 settings.office_id,
                 actor=subject,
                 event_type="dispatch_skipped",
+                action_id=action_id,
                 outbound_draft_id=draft_id,
                 note=payload.note or "Güvenlik nedeniyle taslak modunda bırakıldı.",
             )
             return {
                 "draft": updated,
+                "action": linked_action,
                 "message": "Gönderim güvenlik ayarı nedeniyle taslak modunda bırakıldı.",
                 "dispatch_mode": "manual_review_only",
             }
@@ -2363,20 +3685,174 @@ def create_app() -> FastAPI:
             draft_id,
             delivery_status="ready_to_send",
             approved_by=subject,
+            dispatch_state="ready",
+            dispatch_error=None,
         )
+        if linked_action and action_id:
+            linked_action = store.update_assistant_action_status(
+                settings.office_id,
+                action_id,
+                "approved",
+                draft_id=draft_id,
+                dispatch_state="ready",
+                dispatch_error=None,
+            )
         store.add_approval_event(
             settings.office_id,
             actor=subject,
             event_type="dispatch_ready",
+            action_id=action_id,
             outbound_draft_id=draft_id,
             note=payload.note or "Taslak dış gönderime hazırlandı.",
         )
         audit.log("assistant_draft_send_requested", subject=subject, role=role, session_id=sid, draft_id=draft_id)
         return {
             "draft": updated,
+            "action": linked_action,
             "message": "Taslak gönderime hazırlandı. Otomatik gönderim kapalıysa son adımı manuel doğrulayın.",
             "dispatch_mode": "ready_to_send",
         }
+
+    @app.post("/assistant/drafts/{draft_id}/dispatch-complete")
+    def complete_assistant_draft_dispatch(
+        draft_id: int,
+        payload: AssistantDispatchReportRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("lawyer", role)
+        draft = store.update_outbound_draft(
+            settings.office_id,
+            draft_id,
+            delivery_status="sent",
+            dispatch_state="completed",
+            dispatch_error=None,
+            external_message_id=payload.external_message_id,
+            last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+        )
+        if not draft:
+            raise HTTPException(status_code=404, detail="Taslak bulunamadı.")
+        if payload.action_id:
+            store.update_assistant_action_status(
+                settings.office_id,
+                payload.action_id,
+                "completed",
+                dispatch_state="completed",
+                dispatch_error=None,
+                external_message_id=payload.external_message_id,
+                last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+            )
+        store.add_approval_event(
+            settings.office_id,
+            actor=subject,
+            event_type="dispatch_completed",
+            action_id=payload.action_id,
+            outbound_draft_id=draft_id,
+            note=payload.note or "Dış gönderim tamamlandı.",
+        )
+        audit.log("assistant_draft_dispatch_completed", subject=subject, role=role, session_id=sid, draft_id=draft_id)
+        return {"draft": draft, "message": payload.note or "Dış gönderim tamamlandı."}
+
+    @app.post("/assistant/drafts/{draft_id}/dispatch-failed")
+    def fail_assistant_draft_dispatch(
+        draft_id: int,
+        payload: AssistantDispatchReportRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("lawyer", role)
+        draft = store.update_outbound_draft(
+            settings.office_id,
+            draft_id,
+            delivery_status="failed",
+            dispatch_state="failed",
+            dispatch_error=payload.error or "Dış gönderim başarısız oldu.",
+            last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+        )
+        if not draft:
+            raise HTTPException(status_code=404, detail="Taslak bulunamadı.")
+        if payload.action_id:
+            store.update_assistant_action_status(
+                settings.office_id,
+                payload.action_id,
+                "approved",
+                dispatch_state="failed",
+                dispatch_error=payload.error or "Dış gönderim başarısız oldu.",
+                last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+            )
+        store.add_approval_event(
+            settings.office_id,
+            actor=subject,
+            event_type="dispatch_failed",
+            action_id=payload.action_id,
+            outbound_draft_id=draft_id,
+            note=payload.error or payload.note or "Dış gönderim başarısız oldu.",
+        )
+        audit.log("assistant_draft_dispatch_failed", subject=subject, role=role, session_id=sid, draft_id=draft_id)
+        return {"draft": draft, "message": payload.error or "Dış gönderim başarısız oldu."}
+
+    @app.post("/assistant/actions/{action_id}/dispatch-complete")
+    def complete_assistant_action_dispatch(
+        action_id: int,
+        payload: AssistantDispatchReportRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("lawyer", role)
+        action = store.update_assistant_action_status(
+            settings.office_id,
+            action_id,
+            "completed",
+            dispatch_state="completed",
+            dispatch_error=None,
+            external_message_id=payload.external_message_id,
+            last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+        )
+        if not action:
+            raise HTTPException(status_code=404, detail="Aksiyon bulunamadı.")
+        store.add_approval_event(
+            settings.office_id,
+            actor=subject,
+            event_type="dispatch_completed",
+            action_id=action_id,
+            outbound_draft_id=int(action["draft_id"]) if action.get("draft_id") else None,
+            note=payload.note or "Aksiyon gönderimi tamamlandı.",
+        )
+        audit.log("assistant_action_dispatch_completed", subject=subject, role=role, session_id=sid, action_id=action_id)
+        return {"action": action, "message": payload.note or "Aksiyon gönderimi tamamlandı."}
+
+    @app.post("/assistant/actions/{action_id}/dispatch-failed")
+    def fail_assistant_action_dispatch(
+        action_id: int,
+        payload: AssistantDispatchReportRequest,
+        x_role: str | None = Header(default=None),
+        authorization: str | None = Header(default=None),
+    ):
+        subject, role, sid = _extract_context(x_role, authorization, settings.jwt_secret, store, settings.allow_header_auth)
+        require_role("lawyer", role)
+        action = store.update_assistant_action_status(
+            settings.office_id,
+            action_id,
+            "approved",
+            dispatch_state="failed",
+            dispatch_error=payload.error or "Aksiyon gönderimi başarısız oldu.",
+            last_dispatch_at=datetime.now(timezone.utc).isoformat(),
+        )
+        if not action:
+            raise HTTPException(status_code=404, detail="Aksiyon bulunamadı.")
+        store.add_approval_event(
+            settings.office_id,
+            actor=subject,
+            event_type="dispatch_failed",
+            action_id=action_id,
+            outbound_draft_id=int(action["draft_id"]) if action.get("draft_id") else None,
+            note=payload.error or payload.note or "Aksiyon gönderimi başarısız oldu.",
+        )
+        audit.log("assistant_action_dispatch_failed", subject=subject, role=role, session_id=sid, action_id=action_id)
+        return {"action": action, "message": payload.error or "Aksiyon gönderimi başarısız oldu."}
 
     @app.get("/workspace")
     def get_workspace(

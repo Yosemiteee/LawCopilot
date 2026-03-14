@@ -81,9 +81,10 @@ describe("AppRouter", () => {
 
     renderApp(["/dashboard"]);
 
-    await waitFor(() => expect(screen.getByText("Kapat")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText("Kapat")).toBeInTheDocument());
     expect(screen.getAllByText("Bugün").length).toBeGreaterThan(0);
     expect(screen.getByText("Bugün için ajanda boş")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Araçlar" })).not.toBeInTheDocument();
   });
 
   it("redirects workspace route into assistant tool drawer and prefers workspace context", async () => {
@@ -125,7 +126,7 @@ describe("AppRouter", () => {
     });
 
     await waitFor(() => expect(screen.getAllByText("Çalışma Alanı").length).toBeGreaterThan(0));
-    expect(screen.getByText("Çalışma alanı araması")).toBeInTheDocument();
+    expect(screen.queryByText("Çalışma alanı araması")).not.toBeInTheDocument();
     expect(screen.queryByText("Eski Seçili Dosya")).not.toBeInTheDocument();
   });
 });

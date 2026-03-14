@@ -351,18 +351,21 @@ class OpenClawWorkspaceContract:
 
     def _build_user_md(self, profile: dict[str, Any]) -> str:
         important_dates = profile.get("important_dates") or []
+        related_profiles = profile.get("related_profiles") or []
         freeform_profile = str(profile.get("assistant_notes") or "").strip()
         lines = [
             "# USER.md",
             "",
             "## Temel Kimlik",
             f"- İsim / hitap: {profile.get('display_name') or 'Belirtilmedi'}",
+            f"- Sevdiği renk: {profile.get('favorite_color') or 'Belirtilmedi'}",
             "",
             "## Kullanıcıdan Gelen Not",
             freeform_profile or "Henüz serbest profil notu girilmedi.",
             "",
         ]
         legacy_lines = [
+            f"- Sevdiği renk: {profile.get('favorite_color') or 'Belirtilmedi'}",
             f"- İletişim stili: {profile.get('communication_style') or 'Belirtilmedi'}",
             f"- Ulaşım tercihi: {profile.get('transport_preference') or 'Belirtilmedi'}",
             f"- Hava tercihi: {profile.get('weather_preference') or 'Belirtilmedi'}",
@@ -380,6 +383,21 @@ class OpenClawWorkspaceContract:
                 lines.append(f"- {label}: {value}" + (f" | {notes}" if notes else ""))
         else:
             lines.append("- Kayıtlı önemli tarih yok.")
+        lines.append("")
+        lines.append("## Yakın Çevre Profilleri")
+        if related_profiles:
+            for item in related_profiles[:8]:
+                name = item.get("name") or "Yakın çevre"
+                relationship = item.get("relationship") or "İlişki belirtilmedi"
+                notes = item.get("notes") or item.get("preferences") or ""
+                lines.append(f"- {name} ({relationship})" + (f": {notes}" if notes else ""))
+                for date_item in (item.get("important_dates") or [])[:4]:
+                    label = date_item.get("label") or "Önemli tarih"
+                    value = date_item.get("date") or "Tarih yok"
+                    detail = date_item.get("notes") or ""
+                    lines.append(f"  - {label}: {value}" + (f" | {detail}" if detail else ""))
+        else:
+            lines.append("- Kayıtlı aile / yakın çevre profili yok.")
         lines.append("")
         return "\n".join(lines)
 

@@ -23,6 +23,27 @@ def _payload_error(payload: Any, fallback: str) -> str:
     return fallback
 
 
+def _gemini_model_path(model: str) -> str:
+    cleaned = str(model or "").strip()
+    if cleaned.startswith("models/"):
+        return cleaned
+    return f"models/{cleaned}"
+
+
+def _extract_gemini_text(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return ""
+    content = (candidates[0] or {}).get("content") or {}
+    parts = content.get("parts") if isinstance(content, dict) else None
+    if not isinstance(parts, list):
+        return ""
+    texts = [str(item.get("text") or "").strip() for item in parts if isinstance(item, dict) and str(item.get("text") or "").strip()]
+    return "\n".join(texts).strip()
+
+
 class DirectProviderLLM:
     def __init__(
         self,
@@ -43,7 +64,7 @@ class DirectProviderLLM:
 
     @property
     def enabled(self) -> bool:
-        if self.provider_type not in {"openai", "openai-compatible", "ollama"}:
+        if self.provider_type not in {"openai", "openai-compatible", "ollama", "gemini"}:
             return False
         if not self.configured:
             return False
@@ -66,6 +87,8 @@ class DirectProviderLLM:
         try:
             if self.provider_type == "ollama":
                 return self._generate_ollama(prompt)
+            if self.provider_type == "gemini":
+                return self._generate_gemini(prompt)
             return self._generate_openai_compatible(prompt)
         except httpx.TimeoutException:
             return LLMGenerationResult(ok=False, provider=self.provider_type, model=self.model, error="direct_provider_timeout")
@@ -155,6 +178,54 @@ class DirectProviderLLM:
             ok=bool(text),
             text=text,
             provider="ollama",
+            model=self.model,
+            error=None if text else "direct_provider_empty_text",
+            raw=payload if isinstance(payload, dict) else {"raw": response.text},
+        )
+
+    def _generate_gemini(self, prompt: str) -> LLMGenerationResult:
+        model_path = _gemini_model_path(self.model)
+        with httpx.Client(timeout=self.timeout_seconds) as client:
+            response = client.post(
+                f"{self.base_url}/{model_path}:generateContent",
+                params={"key": self.api_key},
+                headers={"Content-Type": "application/json"},
+                json={
+                    "system_instruction": {
+                        "parts": [
+                            {
+                                "text": "You are LawCopilot. Reply in Turkish, be concise, and prefer source-grounded legal assistance.",
+                            }
+                        ]
+                    },
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [{"text": prompt}],
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                    },
+                },
+            )
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {"raw": response.text}
+        if response.status_code >= 400:
+            return LLMGenerationResult(
+                ok=False,
+                provider="gemini",
+                model=self.model,
+                error=_payload_error(payload, f"gemini_failed:{response.status_code}"),
+                raw=payload if isinstance(payload, dict) else {"raw": response.text},
+            )
+        text = _extract_gemini_text(payload)
+        return LLMGenerationResult(
+            ok=bool(text),
+            text=text,
+            provider="gemini",
             model=self.model,
             error=None if text else "direct_provider_empty_text",
             raw=payload if isinstance(payload, dict) else {"raw": response.text},

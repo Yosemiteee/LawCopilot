@@ -9,6 +9,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { SectionCard } from "../components/common/SectionCard";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { belgeDurumuEtiketi, kisaDosyaBoyutu } from "../lib/labels";
+import { openWorkspaceDocument } from "../lib/workspaceDocuments";
 
 export function DocumentsPage() {
   const { settings } = useAppContext();
@@ -150,12 +151,14 @@ export function DocumentsPage() {
                         className="button button--ghost"
                         type="button"
                         onClick={() =>
-                          navigate(
-                            buildDocumentViewerPath({
+                          void openWorkspaceDocument({
+                            relativePath: document.relative_path,
+                            fallbackTarget: {
                               scope: "workspace",
                               documentId: document.id,
-                            }),
-                          )
+                            },
+                            navigate,
+                          })
                         }
                       >
                         Belgeyi aç
@@ -248,15 +251,17 @@ export function DocumentsPage() {
                         <button
                           className="button button--ghost"
                           onClick={() =>
-                            navigate(
-                              buildDocumentViewerPath({
+                            void openWorkspaceDocument({
+                              relativePath: item.goreli_yol,
+                              fallbackTarget: {
                                 scope: "workspace",
                                 documentId: item.workspace_document_id,
                                 chunkId: item.destekleyici_pasajlar[0]?.chunk_id,
                                 chunkIndex: item.destekleyici_pasajlar[0]?.chunk_index ?? 0,
                                 excerpt: item.destekleyici_pasajlar[0]?.excerpt,
-                              }),
-                            )
+                              },
+                              navigate,
+                            })
                           }
                           type="button"
                         >

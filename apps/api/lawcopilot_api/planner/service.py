@@ -18,16 +18,9 @@ def build_thread_response_extensions(
     source_context = dict(reply.get("source_context") or {})
     action = source_context.get("assistant_action") if isinstance(source_context.get("assistant_action"), dict) else None
     draft = reply.get("draft_preview") if isinstance(reply.get("draft_preview"), dict) else None
-
-    for item in tool_suggestions:
-        proposed_actions.append(
-            {
-                "tool": str(item.get("tool") or ""),
-                "label": str(item.get("label") or ""),
-                "reason": str(item.get("reason") or ""),
-                "type": "navigation",
-            }
-        )
+    document_inventory = source_context.get("document_inventory") if isinstance(source_context.get("document_inventory"), dict) else None
+    web_search_results = source_context.get("web_search_results") if isinstance(source_context.get("web_search_results"), list) else None
+    travel_options = source_context.get("travel_options") if isinstance(source_context.get("travel_options"), list) else None
 
     if draft:
         proposed_actions.append(
@@ -60,6 +53,12 @@ def build_thread_response_extensions(
                 {"tool": "calendar", "mode": "read", "status": "completed", "approval_required": False},
             ]
         )
+        if document_inventory and ((document_inventory.get("workspace_count") or 0) or (document_inventory.get("matter_count") or 0)):
+            executed_tools.append({"tool": "documents", "mode": "read", "status": "completed", "approval_required": False})
+        if web_search_results:
+            executed_tools.append({"tool": "web-search", "mode": "read", "status": "completed", "approval_required": False})
+        if travel_options:
+            executed_tools.append({"tool": "travel", "mode": "read", "status": "completed", "approval_required": False})
         if draft:
             executed_tools.append(
                 {

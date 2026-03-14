@@ -161,7 +161,7 @@ export function SearchWorkbench({ matterId, heading = "Dosya araması" }: { matt
                           }
                           type="button"
                         >
-                          Belgeyi aç
+                          Belgeyi incele
                         </button>
                       </div>
                     </div>
