@@ -311,10 +311,11 @@ def _compose_assistant_onboarding_reply(query: str, *, home: dict[str, Any], onb
     elif next_questions:
         lead = " ".join(acknowledgements[:2]) + (" " if acknowledgements else "")
         next_reason = str(next_questions[0].get("reason") or "").strip()
+        prompt_lead = "Sıradaki sorum şu:" if acknowledgements else "İlk sorum şu:"
         content = (
             f"{lead}Tam kişisel bir asistan kurmak için seni ve kendi çalışma tarzımı tek tek netleştiriyorum. "
             f"Soruları sırayla soracağım ve cevaplarını profile işleyeceğim. "
-            f"İlk sorum şu: {next_questions[0].get('question')}"
+            f"{prompt_lead} {next_questions[0].get('question')}"
         )
         if next_reason:
             content = f"{content} Bunu sormamın nedeni: {next_reason}"
@@ -351,6 +352,184 @@ def _normalize_tr_text(value: str) -> str:
         .replace("ö", "o")
         .replace("ç", "c")
     )
+
+
+def _clean_onboarding_answer(value: str, *, limit: int = 240) -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "").strip())
+    cleaned = cleaned.strip("“”\"' ")
+    cleaned = cleaned.strip(" .,:;!?")
+    return cleaned[:limit]
+
+
+def _append_profile_note(existing: str | None, note: str) -> str:
+    candidate = _clean_onboarding_answer(note, limit=260)
+    if not candidate:
+        return str(existing or "").strip()
+    current = str(existing or "").strip()
+    if _normalize_tr_text(candidate) in _normalize_tr_text(current):
+        return current
+    if current:
+        return f"{current}\n- {candidate}"
+    return candidate
+
+
+def _capture_direct_onboarding_answer(
+    query: str,
+    *,
+    onboarding_state: dict[str, object],
+    prior_messages: list[dict[str, object]],
+    settings,
+    store: Persistence,
+) -> list[dict[str, Any]]:
+    if bool(onboarding_state.get("complete")) or bool(onboarding_state.get("blocked_by_setup")):
+        return []
+
+    next_questions = list(onboarding_state.get("next_questions") or [])
+    if not next_questions:
+        return []
+
+    last_assistant = next(
+        (
+            message
+            for message in reversed(prior_messages)
+            if str(message.get("role") or "") == "assistant"
+        ),
+        None,
+    )
+    if not last_assistant or str(last_assistant.get("generated_from") or "") != "assistant_onboarding_guide":
+        return []
+
+    normalized = _normalize_tr_text(query)
+    operational_tokens = (
+        "belge",
+        "dosya",
+        "takvim",
+        "ajanda",
+        "mail",
+        "e posta",
+        "mesaj",
+        "whatsapp",
+        "telegram",
+        "tweet",
+        "gonderi",
+        "seyahat",
+        "bilet",
+        "tren",
+        "ara",
+        "bul",
+        "ozet",
+        "hazirla",
+        "gonder",
+    )
+    if (
+        _extract_calendar_candidate(query)
+        or _is_document_inventory_query(query)
+        or is_web_search_query(query)
+        or is_travel_query(query)
+        or is_travel_booking_query(query)
+        or any(token in normalized for token in operational_tokens)
+    ):
+        return []
+
+    answer = _clean_onboarding_answer(query)
+    if not answer:
+        return []
+
+    if "?" in answer and len(answer.split()) > 3:
+        return []
+
+    next_question = next_questions[0]
+    field = str(next_question.get("field") or "").strip()
+    if not field:
+        return []
+
+    runtime_profile = store.get_assistant_runtime_profile(settings.office_id) or _empty_assistant_runtime_profile_payload(settings.office_id)
+    profile = store.get_user_profile(settings.office_id) or _empty_profile_payload(settings.office_id)
+
+    if field == "assistant_name":
+        saved = store.upsert_assistant_runtime_profile(
+            settings.office_id,
+            assistant_name=answer,
+            role_summary=runtime_profile.get("role_summary"),
+            tone=runtime_profile.get("tone"),
+            avatar_path=runtime_profile.get("avatar_path"),
+            soul_notes=runtime_profile.get("soul_notes"),
+            tools_notes=runtime_profile.get("tools_notes"),
+            heartbeat_extra_checks=runtime_profile.get("heartbeat_extra_checks") or [],
+        )
+        return [
+            {
+                "kind": "assistant_persona_signal",
+                "status": "stored",
+                "summary": "Asistan adı kaydedildi.",
+                "fields": ["assistant_name"],
+                "updated_at": saved.get("updated_at"),
+            }
+        ]
+
+    if field in {"tone", "soul_notes", "role_summary"}:
+        patch = {
+            "assistant_name": runtime_profile.get("assistant_name"),
+            "role_summary": runtime_profile.get("role_summary"),
+            "tone": runtime_profile.get("tone"),
+            "avatar_path": runtime_profile.get("avatar_path"),
+            "soul_notes": runtime_profile.get("soul_notes"),
+            "tools_notes": runtime_profile.get("tools_notes"),
+            "heartbeat_extra_checks": runtime_profile.get("heartbeat_extra_checks") or [],
+        }
+        if field == "soul_notes":
+            patch[field] = _append_profile_note(runtime_profile.get(field), answer)
+        else:
+            patch[field] = answer
+        saved = store.upsert_assistant_runtime_profile(settings.office_id, **patch)
+        return [
+            {
+                "kind": "assistant_persona_signal",
+                "status": "stored",
+                "summary": "Asistan kimliği güncellendi.",
+                "fields": [field],
+                "updated_at": saved.get("updated_at"),
+            }
+        ]
+
+    if field in {
+        "display_name",
+        "favorite_color",
+        "food_preferences",
+        "transport_preference",
+        "weather_preference",
+        "travel_preferences",
+        "communication_style",
+        "assistant_notes",
+    }:
+        patch = {
+            "display_name": profile.get("display_name"),
+            "favorite_color": profile.get("favorite_color"),
+            "food_preferences": profile.get("food_preferences"),
+            "transport_preference": profile.get("transport_preference"),
+            "weather_preference": profile.get("weather_preference"),
+            "travel_preferences": profile.get("travel_preferences"),
+            "communication_style": profile.get("communication_style"),
+            "assistant_notes": profile.get("assistant_notes"),
+            "important_dates": profile.get("important_dates") or [],
+            "related_profiles": profile.get("related_profiles") or [],
+        }
+        if field == "assistant_notes":
+            patch[field] = _append_profile_note(profile.get(field), answer)
+        else:
+            patch[field] = answer
+        saved = store.upsert_user_profile(settings.office_id, **patch)
+        return [
+            {
+                "kind": "profile_signal",
+                "status": "stored",
+                "summary": "Kullanıcı profiline yeni bilgi işlendi.",
+                "fields": [field],
+                "updated_at": saved.get("updated_at"),
+            }
+        ]
+
+    return []
 
 
 def _safe_local_timezone():
@@ -3247,6 +3426,14 @@ def create_app() -> FastAPI:
         normalized_query = payload.content.strip()
         onboarding_before = _assistant_onboarding_state(settings, store)
         memory_updates = memory_service.capture_chat_signal(normalized_query)
+        if not memory_updates:
+            memory_updates = _capture_direct_onboarding_answer(
+                normalized_query,
+                onboarding_state=onboarding_before,
+                prior_messages=prior_messages,
+                settings=settings,
+                store=store,
+            )
         onboarding_after = _assistant_onboarding_state(settings, store)
         if pending_calendar and _is_calendar_confirmation(normalized_query):
             provider = "lawcopilot-planner"

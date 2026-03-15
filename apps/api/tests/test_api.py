@@ -810,6 +810,49 @@ def test_assistant_onboarding_state_and_chat_profile_capture(monkeypatch):
         assert final_state["stage"] == "complete"
 
 
+def test_assistant_onboarding_route_accepts_plain_answer(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmp:
+        workspace_root = Path(tmp) / "workspace"
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("LAWCOPILOT_DB_PATH", f"{tmp}/onboarding-route.db")
+        monkeypatch.setenv("LAWCOPILOT_AUDIT_LOG", f"{tmp}/audit.log.jsonl")
+        monkeypatch.setenv("LAWCOPILOT_STRUCTURED_LOG", f"{tmp}/events.log.jsonl")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_TYPE", "gemini")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_MODEL", "gemini-2.5-flash")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_API_KEY", "gemini-test-key")
+        monkeypatch.setenv("LAWCOPILOT_PROVIDER_CONFIGURED", "true")
+
+        store = Persistence(Path(f"{tmp}/onboarding-route.db"))
+        store.save_workspace_root("default-office", "Kişisel Ofis", str(workspace_root), "workspace-hash")
+
+        scoped_client = TestClient(create_app())
+        token = scoped_client.post("/auth/token", json={"subject": "intern-user", "role": "intern"}).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        first = scoped_client.post(
+            "/assistant/thread/messages",
+            headers=headers,
+            json={"content": "Tanışma görüşmesini başlatalım."},
+        )
+        assert first.status_code == 200
+        assert "isim ver" in first.json()["message"]["content"].lower()
+
+        second = scoped_client.post(
+            "/assistant/thread/messages",
+            headers=headers,
+            json={"content": "Ada"},
+        )
+        assert second.status_code == 200
+        body = second.json()
+        assert "sıradaki sorum şu" in body["message"]["content"].lower()
+        assert "isim ver" not in body["message"]["content"].lower()
+
+        refreshed_store = Persistence(Path(f"{tmp}/onboarding-route.db"))
+        runtime_profile = refreshed_store.get_assistant_runtime_profile("default-office")
+        assert runtime_profile["assistant_name"] == "Ada"
+
+
 def test_query_runtime_prompt_includes_user_profile(monkeypatch):
     captured: dict[str, str] = {}
 
