@@ -152,6 +152,10 @@ async function dispatchApprovedAction(payload = {}) {
       throw new Error("Bu kanal için otomatik gönderim köprüsü bulunamadı.");
     }
 
+    if (result?.patch) {
+      saveCurrentConfig(result.patch);
+    }
+
     if (draftId) {
       await reportDraftDispatch(`/assistant/drafts/${draftId}/dispatch-complete`, {
         action_id: actionId || null,

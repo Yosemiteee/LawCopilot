@@ -230,7 +230,7 @@ export function WorkspaceOverviewPanel() {
                     {sozluk.workspace.choose}
                   </button>
                 ) : null}
-                <button className="button button--secondary" type="button" onClick={() => navigate("/settings")}>
+                <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=workspace&section=workspace-setup-card")}>
                   {sozluk.shell.setupBannerAction}
                 </button>
               </div>

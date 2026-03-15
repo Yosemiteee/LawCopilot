@@ -51,12 +51,12 @@ function resolveDockerBinary() {
       return candidate;
     }
   }
-  throw new Error("Docker bulunamadı. Codex hesap oturumu için Docker gerekir.");
+  throw new Error("Docker bulunamadı. OpenAI hesabı (Codex) gelişmiş moddur ve Docker gerektirir. Normal kullanım için Gemini API veya OpenAI API seçin.");
 }
 
 function resolveScriptBinary() {
   if (process.platform === "win32") {
-    throw new Error("Tarayıcı tabanlı Codex oturumu bu aşamada Windows masaüstü kabuğunda gömülü değil.");
+    throw new Error("OpenAI hesabı (Codex) bu Windows kurulumunda hazır değil. Normal kullanım için Gemini API veya OpenAI API seçin.");
   }
   if (cachedScriptBinary) {
     return cachedScriptBinary;
@@ -70,7 +70,7 @@ function resolveScriptBinary() {
       return candidate;
     }
   }
-  throw new Error("TTY köprüsü bulunamadı. Codex oturumu için 'script' komutu gerekir.");
+  throw new Error("OpenAI hesabı (Codex) için gerekli terminal köprüsü bulunamadı. Normal kullanım için Gemini API veya OpenAI API seçin.");
 }
 
 function resolveOpenClawImage() {
@@ -88,7 +88,7 @@ function resolveOpenClawImage() {
       return image;
     }
   }
-  throw new Error("OpenClaw imajı bulunamadı. Önce openclaw-local:chromium imajı hazırlanmalı.");
+  throw new Error("OpenClaw çalışma ortamı bulunamadı. OpenAI hesabı (Codex) gelişmiş moddur. Normal kullanım için Gemini API veya OpenAI API ile devam edin.");
 }
 
 function quoteShellArg(value) {

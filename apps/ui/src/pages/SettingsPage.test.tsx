@@ -363,8 +363,8 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("button", { name: "Bağlantılar" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Kurulum" }));
-    await waitFor(() => expect(screen.getByText("Hesaplarını bağla")).toBeInTheDocument());
-    expect(screen.getByText("Google hesabı")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Hesaplarını bağla").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Google hesabı").length).toBeGreaterThan(0);
     expect(screen.getByText("Telegram")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Google hesabını bağla" })).toBeInTheDocument();
     expect(screen.getByText("WhatsApp")).toBeInTheDocument();
@@ -373,5 +373,104 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("button", { name: "WhatsApp'ı kaydet" })).toBeInTheDocument();
     expect(screen.getByText("X hesabı")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "X hesabını bağla" })).toBeInTheDocument();
+  });
+
+  it("opens kurulum sekmesi directly from query params", async () => {
+    installFetchMock({
+      "GET /health": {
+        ok: true,
+        service: "lawcopilot-api",
+        app_name: "LawCopilot",
+        version: "0.7.0-pilot.1",
+        office_id: "default-office",
+        deployment_mode: "local-only",
+        release_channel: "pilot",
+        connector_dry_run: true,
+        workspace_configured: false,
+        workspace_root_name: "",
+        google_configured: false,
+        telegram_configured: false,
+        rag_backend: "inmemory",
+        rag_runtime: { backend: "inmemory", mode: "default" },
+      },
+      "GET /settings/model-profiles": {
+        default: "hybrid",
+        deployment_mode: "local-only",
+        office_id: "default-office",
+        profiles: { hybrid: {} },
+      },
+      "GET /telemetry/health": {
+        ok: true,
+        app_name: "LawCopilot",
+        version: "0.7.0-pilot.1",
+        release_channel: "pilot",
+        environment: "pilot",
+        deployment_mode: "local-only",
+        desktop_shell: "electron",
+        office_id: "default-office",
+        structured_log_path: "artifacts/events.log.jsonl",
+        audit_log_path: "artifacts/audit.log.jsonl",
+        db_path: "artifacts/lawcopilot.db",
+        connector_dry_run: true,
+        recent_events: [],
+      },
+      "GET /workspace": {
+        configured: false,
+        workspace: null,
+        documents: { items: [], count: 0 },
+        scan_jobs: { items: [] },
+      },
+      "GET /profile": {
+        office_id: "default-office",
+        display_name: "",
+        favorite_color: "",
+        food_preferences: "",
+        transport_preference: "",
+        weather_preference: "",
+        travel_preferences: "",
+        communication_style: "",
+        assistant_notes: "",
+        important_dates: [],
+        related_profiles: [],
+        created_at: null,
+        updated_at: null,
+      },
+      "GET /assistant/runtime/profile": {
+        office_id: "default-office",
+        assistant_name: "",
+        role_summary: "",
+        tone: "",
+        avatar_path: "",
+        soul_notes: "",
+        tools_notes: "",
+        heartbeat_extra_checks: [],
+        created_at: null,
+        updated_at: null,
+      },
+      "GET /assistant/runtime/workspace": null,
+      "GET /assistant/onboarding/state": {
+        complete: false,
+        workspace_ready: false,
+        provider_ready: false,
+        model_ready: false,
+        assistant_ready: false,
+        user_ready: false,
+        summary: "Kurulum eksik.",
+        next_question: "",
+        interview_intro: "",
+        interview_topics: [],
+        suggested_prompts: [],
+        profile: {},
+      },
+      "GET /assistant/tools/status": {
+        items: [],
+        generated_from: "connector_registry",
+      },
+    });
+
+    renderApp(["/settings?tab=workspace&section=integration-google"]);
+
+    await waitFor(() => expect(screen.getAllByText("Hesaplarını bağla").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Google hesabı").length).toBeGreaterThan(0);
   });
 });

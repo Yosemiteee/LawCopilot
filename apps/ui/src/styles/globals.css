@@ -7,9 +7,14 @@ body {
   height: 100%;
 }
 
+html {
+  font-size: var(--font-root-size);
+}
+
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-size: 1rem;
   color: var(--text-strong);
   background:
     radial-gradient(circle at top right, var(--bg-page-radial), transparent 28%),
@@ -47,11 +52,11 @@ button {
 
 .floating-settings {
   position: fixed;
-  left: 20px;
-  bottom: 20px;
+  left: clamp(14px, 1.2vw, 20px);
+  bottom: clamp(14px, 1.2vw, 20px);
   z-index: 100;
-  width: 48px;
-  height: 48px;
+  width: var(--topbar-button-size);
+  height: var(--topbar-button-size);
   border-radius: 50%;
   background: var(--bg-surface);
   color: var(--text-strong);
@@ -75,8 +80,8 @@ button {
 }
 
 .floating-settings svg {
-  width: 24px;
-  height: 24px;
+  width: clamp(20px, 1rem + 0.25vw, 24px);
+  height: clamp(20px, 1rem + 0.25vw, 24px);
 }
 
 
@@ -95,8 +100,8 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 1rem;
+  gap: var(--space-3);
+  padding: clamp(0.6rem, 0.5rem + 0.3vw, 0.8rem) clamp(0.85rem, 0.7rem + 0.65vw, 1.15rem);
   border-bottom: 1px solid var(--line-soft);
   background: var(--bg-overlay);
   position: sticky;
@@ -107,7 +112,7 @@ button {
 .app-shell__topbar-group {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -129,22 +134,22 @@ button {
 
 .app-shell__topbar--overlay .app-shell__topbar-group {
   position: absolute;
-  top: 0.85rem;
+  top: clamp(0.75rem, 0.62rem + 0.28vw, 0.9rem);
   pointer-events: auto;
 }
 
 .app-shell__topbar--overlay .app-shell__topbar-group--left {
-  left: 0.9rem;
+  left: clamp(0.75rem, 0.62rem + 0.4vw, 1rem);
 }
 
 .app-shell__topbar--overlay .app-shell__topbar-group--right {
-  right: 0.9rem;
+  right: clamp(0.75rem, 0.62rem + 0.4vw, 1rem);
 }
 
 .app-shell__main {
   flex: 1;
   min-height: 0;
-  padding: var(--space-6);
+  padding: clamp(0.9rem, 0.65rem + 0.85vw, 1.6rem);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -218,12 +223,12 @@ button {
 }
 
 .page-grid--setup {
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(clamp(300px, 28vw, 380px), 0.85fr);
   align-items: start;
 }
 
 .page-grid--settings {
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   align-items: stretch;
 }
 
@@ -1053,7 +1058,7 @@ mark {
 
 .assistant-home-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(clamp(250px, 25vw, 320px), 0.75fr);
   gap: var(--space-4);
 }
 
@@ -1067,7 +1072,7 @@ mark {
 }
 
 .assistant-vnext__body--with-drawer {
-  grid-template-columns: minmax(0, 1fr) 14px minmax(320px, var(--assistant-drawer-width, 456px));
+  grid-template-columns: minmax(0, 1fr) 14px minmax(320px, var(--assistant-drawer-width, var(--drawer-default-width)));
   min-height: 0;
 }
 
@@ -1126,7 +1131,7 @@ mark {
 .assistant-tools-panel {
   position: sticky;
   top: 0;
-  max-height: calc(100vh - 7rem);
+  max-height: calc(100dvh - clamp(5.75rem, 4.8rem + 2.1vw, 7rem));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1233,7 +1238,7 @@ mark {
 }
 
 .assistant-vnext__body--drawer-fullscreen .assistant-tools-panel {
-  max-height: calc(100vh - 7rem);
+  max-height: calc(100dvh - clamp(5.75rem, 4.8rem + 2.1vw, 7rem));
 }
 
 .calendar-tool {
@@ -1472,7 +1477,7 @@ mark {
 .assistant-chat-surface {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 5.5rem - 2rem); /* Account for topbar and padding */
+  height: calc(100dvh - clamp(5rem, 4.4rem + 1.9vw, 6rem));
   flex: 1;
 }
 
@@ -1524,7 +1529,7 @@ mark {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-width: 960px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
   width: 100%;
   padding: var(--space-6);
@@ -1614,7 +1619,7 @@ mark {
   min-height: 1px;
   flex-shrink: 0;
   width: 100%;
-  max-width: 960px;
+  max-width: var(--chat-max-width);
   margin: 0 auto;
 }
 
@@ -1654,7 +1659,7 @@ mark {
   justify-content: center;
   padding: var(--space-2) 0 var(--space-3);
   width: 100%;
-  max-width: 960px;
+  max-width: var(--chat-max-width);
   margin: 0 auto;
 }
 
@@ -1684,9 +1689,9 @@ mark {
   display: flex;
   align-items: flex-start;
   width: 100%;
-  max-width: 960px;
+  max-width: var(--chat-max-width);
   margin: 0 auto;
-  padding: 0 var(--space-4);
+  padding: 0 clamp(0.7rem, 0.5rem + 0.75vw, 1rem);
   animation: waBubbleIn 220ms ease;
 }
 
@@ -1715,7 +1720,7 @@ mark {
   position: relative;
   line-height: 1.6;
   word-break: break-word;
-  max-width: 90%;
+  max-width: min(92%, 74ch);
 }
 
 .wa-bubble--user {
@@ -2020,7 +2025,7 @@ mark {
   justify-content: flex-start;
   text-align: center;
   width: 100%;
-  max-width: 960px;
+  max-width: var(--content-max-width);
   min-height: auto;
   margin: 0 auto;
   box-sizing: border-box;
@@ -2034,7 +2039,7 @@ mark {
 
 .wa-welcome__title {
   font-family: var(--font-heading);
-  font-size: 1.8rem;
+  font-size: clamp(1.5rem, 1.15rem + 1vw, 1.95rem);
   margin: 0;
   opacity: 0.85;
 }
@@ -2044,7 +2049,7 @@ mark {
   max-width: 60ch;
   line-height: 1.6;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: clamp(0.92rem, 0.88rem + 0.18vw, 1rem);
 }
 
 .wa-welcome__badges {
@@ -2056,11 +2061,11 @@ mark {
 
 .wa-welcome__card {
   width: 100%;
-  max-width: 640px;
+  max-width: min(100%, clamp(560px, 58vw, 700px));
 }
 
 .wa-welcome__card--narrow {
-  max-width: 520px;
+  max-width: min(100%, clamp(460px, 48vw, 560px));
 }
 
 .wa-badge {
@@ -2078,7 +2083,7 @@ mark {
 
 .wa-quick-prompts {
   width: 100%;
-  max-width: 540px;
+  max-width: min(100%, clamp(480px, 52vw, 580px));
   text-align: center;
 }
 
@@ -2161,7 +2166,7 @@ mark {
 
 .wa-voice-panel {
   width: 100%;
-  max-width: 900px;
+  max-width: min(100%, var(--content-max-width));
   margin: 0 auto var(--space-3);
   padding: 1rem 1rem 1.05rem;
   border: 1px solid color-mix(in srgb, var(--accent, #6366f1) 18%, var(--line-strong));
@@ -2333,7 +2338,7 @@ mark {
 
 .wa-attachments {
   width: 100%;
-  max-width: 768px;
+  max-width: var(--composer-max-width);
   margin: 0 auto var(--space-3);
   display: grid;
   gap: var(--space-3);
@@ -2425,7 +2430,7 @@ mark {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transition: border-color 200ms ease, box-shadow 200ms ease;
   width: 100%;
-  max-width: 768px;
+  max-width: var(--composer-max-width);
   margin: 0 auto;
 }
 
@@ -2750,13 +2755,13 @@ mark {
   justify-content: center;
   flex: 1;
   text-align: center;
-  padding: var(--space-8);
+  padding: clamp(1.25rem, 0.8rem + 1.4vw, var(--space-8));
   gap: var(--space-5);
 }
 
 .chat-welcome__title {
   font-family: var(--font-heading);
-  font-size: 2rem;
+  font-size: clamp(1.6rem, 1.25rem + 1.05vw, 2rem);
   margin: 0;
 }
 
@@ -2819,7 +2824,7 @@ mark {
   .app-shell__topbar--overlay {
     position: static;
     height: auto;
-    padding: 0.7rem 1rem;
+    padding: clamp(0.6rem, 0.5rem + 0.3vw, 0.8rem) clamp(0.85rem, 0.7rem + 0.65vw, 1.15rem);
     border-bottom: 1px solid var(--line-soft);
     background: var(--bg-overlay);
     pointer-events: auto;
@@ -2873,5 +2878,19 @@ mark {
   .shell-banner {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (min-width: 1500px) {
+  .page-grid--split {
+    grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.58fr);
+  }
+
+  .assistant-home-summary {
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+  }
+
+  .wa-bubble {
+    max-width: min(90%, 78ch);
   }
 }

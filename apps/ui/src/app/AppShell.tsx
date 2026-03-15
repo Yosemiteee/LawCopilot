@@ -123,7 +123,7 @@ export function AppShell() {
                     <strong>{sozluk.shell.setupBannerTitle}</strong>
                     <p>{sozluk.shell.setupBannerDescription}</p>
                   </div>
-                  <button className="button" type="button" onClick={() => navigate("/onboarding")}>
+                  <button className="button" type="button" onClick={() => navigate("/settings?tab=workspace&section=workspace-setup-card")}>
                     {sozluk.shell.setupBannerAction}
                   </button>
                 </div>

@@ -131,6 +131,12 @@ function mergeDesktopConfig(current, patch) {
   next.telegram = { ...(current.telegram || {}), ...(patch.telegram || {}) };
   next.whatsapp = { ...(current.whatsapp || {}), ...(patch.whatsapp || {}) };
   next.x = { ...(current.x || {}), ...(patch.x || {}) };
+  if (String(next.provider?.type || "") === "gemini") {
+    next.provider.baseUrl = String(next.provider.baseUrl || "https://generativelanguage.googleapis.com/v1beta")
+      .trim()
+      .replace(/\/+$/, "")
+      .replace(/\/openai$/i, "");
+  }
   return next;
 }
 

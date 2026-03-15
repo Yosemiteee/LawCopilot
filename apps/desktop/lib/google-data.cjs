@@ -27,15 +27,16 @@ const GOOGLE_CALENDAR_WRITE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
-function resolveCredentials() {
+function resolveCredentials(config) {
+  const google = config?.google || {};
   return {
-    clientId: process.env.LAWCOPILOT_GOOGLE_CLIENT_ID || "",
-    clientSecret: process.env.LAWCOPILOT_GOOGLE_CLIENT_SECRET || "",
+    clientId: String(google.clientId || process.env.LAWCOPILOT_GOOGLE_CLIENT_ID || "").trim(),
+    clientSecret: String(google.clientSecret || process.env.LAWCOPILOT_GOOGLE_CLIENT_SECRET || "").trim(),
   };
 }
 
 async function refreshAccessToken(config) {
-  const credentials = resolveCredentials();
+  const credentials = resolveCredentials(config);
   const google = config?.google || {};
   if (!google.refreshToken || !credentials.clientId || !credentials.clientSecret) {
     return { accessToken: String(google.accessToken || ""), patch: null };

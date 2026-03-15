@@ -259,7 +259,7 @@ export function OnboardingPage() {
             <button className="button" type="button" onClick={() => navigate("/assistant")}>
               Asistanla tanışmayı başlat
             </button>
-            <button className="button button--secondary" type="button" onClick={() => navigate("/settings")}>
+            <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=workspace&section=workspace-setup-card")}>
               Ayarlara dön
             </button>
           </div>

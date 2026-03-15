@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAppContext } from "../app/AppContext";
 import { EmptyState } from "../components/common/EmptyState";
@@ -239,6 +239,7 @@ function normalizeAssistantRuntimeProfile(officeId: string, profile?: Partial<As
 export function SettingsPage() {
   const { settings, setSettings, setWorkspace, setCurrentMatter } = useAppContext();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "workspace" | "system">("profile");
   const [profiles, setProfiles] = useState<ModelProfilesResponse | null>(null);
   const [health, setHealth] = useState<TelemetryHealth | null>(null);
@@ -294,6 +295,30 @@ export function SettingsPage() {
   useEffect(() => {
     refreshSettingsSurface().catch((err: Error) => setError(err.message));
   }, [settings.baseUrl, settings.token]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "appearance" || requestedTab === "workspace" || requestedTab === "system" || requestedTab === "profile") {
+      setActiveTab(requestedTab);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const sectionId = searchParams.get("section");
+    if (!sectionId) {
+      return;
+    }
+    const element = document.getElementById(sectionId);
+    if (!element) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      if (typeof element.scrollIntoView === "function") {
+        element.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeTab, searchParams]);
 
   async function saveDesktopMode(mode: string) {
     setSettings({ deploymentMode: mode });

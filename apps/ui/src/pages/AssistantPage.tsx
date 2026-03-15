@@ -149,6 +149,27 @@ function toolLabel(tool: ToolKey) {
   return labels[tool];
 }
 
+function setupLinkForItem(item: { id?: string | null; action?: string | null }) {
+  const action = String(item.action || "").trim();
+  const id = String(item.id || "").trim();
+  if (id === "setup-google") {
+    return "/settings?tab=workspace&section=integration-google";
+  }
+  if (id === "setup-telegram") {
+    return "/settings?tab=workspace&section=integration-telegram";
+  }
+  if (id === "setup-whatsapp") {
+    return "/settings?tab=workspace&section=integration-whatsapp";
+  }
+  if (id === "setup-x") {
+    return "/settings?tab=workspace&section=integration-x";
+  }
+  if (action === "open_onboarding" || action === "open_settings") {
+    return "/settings?tab=workspace&section=workspace-setup-card";
+  }
+  return "/settings?tab=workspace&section=workspace-setup-card";
+}
+
 function padCalendarNumber(value: number) {
   return String(value).padStart(2, "0");
 }
@@ -2679,8 +2700,8 @@ export function AssistantPage() {
                           <article className="list-item" key={item.id}>
                             <strong>{item.title}</strong>
                             <p className="list-item__meta">{item.details}</p>
-                            <Link className="button button--secondary" to={item.action === "open_onboarding" ? "/onboarding" : "/settings"}>
-                              {item.action === "open_onboarding" ? "Kurulumu aç" : text.openSettingsAction}
+                            <Link className="button button--secondary" to={setupLinkForItem(item)}>
+                              {text.openSettingsAction}
                             </Link>
                           </article>
                         ))}

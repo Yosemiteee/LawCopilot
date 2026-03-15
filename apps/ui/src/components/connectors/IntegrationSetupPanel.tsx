@@ -216,7 +216,7 @@ function providerPreset(type: string): ProviderPreset {
   }
   if (type === "gemini") {
     return {
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
       defaultModel: "gemini-2.5-flash",
       suggestedModels: [
         "gemini-2.5-flash",
@@ -244,6 +244,31 @@ function providerPreset(type: string): ProviderPreset {
     defaultModel: "gpt-4.1-mini",
     suggestedModels: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"],
   };
+}
+
+function normalizeProviderBaseUrl(type: string, value: string, fallback = "") {
+  const base = String(value || fallback || "").trim().replace(/\/+$/, "");
+  if (type === "gemini") {
+    return base.replace(/\/openai$/i, "");
+  }
+  return base;
+}
+
+function friendlyCodexErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  if (!raw) {
+    return sozluk.integrations.codexAuthError;
+  }
+  if (/docker bulunamad/i.test(raw)) {
+    return "OpenAI hesabı (Codex) gelişmiş bir seçenektir. Bu mod için Docker gerekir. Normal kullanım için Gemini bağlantısı veya OpenAI anahtarıyla devam edin.";
+  }
+  if (/openclaw imajı bulunamad/i.test(raw)) {
+    return "OpenAI hesabı (Codex) gelişmiş bir seçenektir. Bu mod için ek çalışma ortamı eksik. Normal kullanım için Gemini bağlantısı veya OpenAI anahtarıyla devam edin.";
+  }
+  if (/windows masaüstü kabuğunda gömülü değil/i.test(raw) || /tty köprüsü bulunamad/i.test(raw)) {
+    return "OpenAI hesabı (Codex) bu kurulumda hazır değil. Normal kullanım için Gemini bağlantısı veya OpenAI anahtarı seçin.";
+  }
+  return raw;
 }
 
 const INTEGRATION_GUIDES = {
@@ -437,7 +462,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       const whatsapp = config.whatsapp || {};
       const x = config.x || {};
       setProviderType(String(provider.type || "openai"));
-      setProviderBaseUrl(String(provider.baseUrl || providerDefaults.baseUrl));
+      setProviderBaseUrl(normalizeProviderBaseUrl(String(provider.type || "openai"), String(provider.baseUrl || providerDefaults.baseUrl), providerDefaults.baseUrl));
       setProviderModel(String(provider.model || providerDefaults.defaultModel));
       setProviderMaskedKey(String(provider.apiKeyMasked || ""));
       setProviderStatusValue(String(provider.validationStatus || "pending"));
@@ -536,9 +561,14 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
     try {
       const status = (await window.lawcopilotDesktop.getCodexAuthStatus()) as CodexAuthStatus;
       applyCodexStatus(status, sozluk.integrations.codexAuthIdle);
+      if (status.error || status.authStatus === "hata") {
+        setProviderError(friendlyCodexErrorMessage(status.error || status.message || ""));
+      } else {
+        setProviderError("");
+      }
     } catch (error) {
       setProviderStatusValue("invalid");
-      setProviderError(error instanceof Error ? error.message : sozluk.integrations.codexAuthError);
+      setProviderError(friendlyCodexErrorMessage(error));
     } finally {
       setCodexBusy(false);
     }
@@ -557,7 +587,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
     } catch (error) {
       setProviderStatusValue("invalid");
       setProviderStatusMessage("");
-      setProviderError(error instanceof Error ? error.message : sozluk.integrations.codexAuthError);
+      setProviderError(friendlyCodexErrorMessage(error));
     } finally {
       setCodexBusy(false);
     }
@@ -585,7 +615,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
     } catch (error) {
       setProviderStatusValue("invalid");
       setProviderStatusMessage("");
-      setProviderError(error instanceof Error ? error.message : sozluk.integrations.codexAuthError);
+      setProviderError(friendlyCodexErrorMessage(error));
     } finally {
       setCodexBusy(false);
     }
@@ -608,6 +638,11 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
     try {
       const status = (await window.lawcopilotDesktop.getGoogleAuthStatus()) as GoogleAuthStatus;
       applyGoogleStatus(status, sozluk.integrations.googleAuthIdle);
+      if (status.configured && !googleConfigured && window.lawcopilotDesktop?.syncGoogleData) {
+        const result = (await window.lawcopilotDesktop.syncGoogleData()) as { message?: string };
+        setGoogleStatusMessage(String(result.message || "Google verileri eşitlendi. Gmail, Takvim ve Drive artık asistana açık."));
+        onUpdated?.();
+      }
     } catch (error) {
       setGoogleStatusValue("invalid");
       setGoogleError(error instanceof Error ? error.message : sozluk.integrations.googleAuthError);
@@ -658,6 +693,10 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       applyGoogleStatus(status, sozluk.integrations.googleAuthConnected);
       setGoogleEnabled(true);
       setGoogleCallbackUrl("");
+      if (status.configured && window.lawcopilotDesktop?.syncGoogleData) {
+        const result = (await window.lawcopilotDesktop.syncGoogleData()) as { message?: string };
+        setGoogleStatusMessage(String(result.message || "Google verileri eşitlendi. Gmail, Takvim ve Drive artık asistana açık."));
+      }
       onUpdated?.();
     } catch (error) {
       setGoogleStatusValue("invalid");
@@ -682,6 +721,10 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       applyGoogleStatus(response.status || {}, sozluk.integrations.googleAuthConnected);
       setGoogleEnabled(Boolean(response.config?.google?.enabled ?? true));
       setGoogleCallbackUrl("");
+      if (response.status?.configured && window.lawcopilotDesktop?.syncGoogleData) {
+        const result = (await window.lawcopilotDesktop.syncGoogleData()) as { message?: string };
+        setGoogleStatusMessage(String(result.message || "Google verileri eşitlendi. Gmail, Takvim ve Drive artık asistana açık."));
+      }
       onUpdated?.();
     } catch (error) {
       setGoogleStatusValue("invalid");
@@ -762,7 +805,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       applyCodexStatus(response.status || {}, sozluk.integrations.codexModelSaved);
       setProviderError("");
     } catch (error) {
-      setProviderError(error instanceof Error ? error.message : sozluk.integrations.codexModelSaveError);
+      setProviderError(friendlyCodexErrorMessage(error));
     } finally {
       setCodexBusy(false);
     }
@@ -781,7 +824,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
     try {
       const response = (await window.lawcopilotDesktop.validateProviderConfig({
         type: providerType,
-        baseUrl: providerBaseUrl,
+        baseUrl: normalizeProviderBaseUrl(providerType, providerBaseUrl, currentProviderPreset.baseUrl),
         model: providerModel,
         apiKey: providerApiKey,
       })) as { message?: string; provider?: { availableModels?: string[]; baseUrl?: string; model?: string; validationStatus?: string } };
@@ -789,7 +832,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       setProviderStatusValue(String(response.provider?.validationStatus || "valid"));
       setProviderAvailableModels(Array.isArray(response.provider?.availableModels) ? response.provider?.availableModels || [] : []);
       if (response.provider?.baseUrl) {
-        setProviderBaseUrl(String(response.provider.baseUrl));
+        setProviderBaseUrl(normalizeProviderBaseUrl(providerType, String(response.provider.baseUrl), currentProviderPreset.baseUrl));
       }
       if (!providerModel && response.provider?.model) {
         setProviderModel(String(response.provider.model));
@@ -814,11 +857,12 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
       return;
     }
     try {
+      const normalizedBaseUrl = normalizeProviderBaseUrl(providerType, providerBaseUrl, currentProviderPreset.baseUrl);
       const saved = (await window.lawcopilotDesktop.saveIntegrationConfig({
         provider: {
           type: providerType,
           authMode: "api-key",
-          baseUrl: providerBaseUrl,
+          baseUrl: normalizedBaseUrl,
           model: providerModel,
           availableModels: providerAvailableModels,
           oauthConnected: false,
@@ -828,6 +872,7 @@ export function IntegrationSetupPanel({ mode = "connectors", onUpdated }: Integr
           validationStatus: providerStatusValue === "valid" ? "valid" : "pending",
         },
       })) as SanitizedIntegrationConfig;
+      setProviderBaseUrl(normalizedBaseUrl);
       setProviderMaskedKey(String(saved.provider?.apiKeyMasked || ""));
       setProviderStatusMessage(sozluk.integrations.providerSaved);
       setProviderError("");

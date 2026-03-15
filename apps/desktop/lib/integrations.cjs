@@ -71,7 +71,10 @@ function responseErrorMessage(payload, fallback) {
 async function validateProviderConfig(input) {
   const type = String(input?.type || "openai");
   const defaults = providerDefaults(type);
-  const baseUrl = normalizeBaseUrl(input?.baseUrl, defaults.baseUrl);
+  let baseUrl = normalizeBaseUrl(input?.baseUrl, defaults.baseUrl);
+  if (type === "gemini") {
+    baseUrl = baseUrl.replace(/\/openai$/i, "");
+  }
   const model = String(input?.model || defaults.model || "").trim();
   const apiKey = String(input?.apiKey || "").trim();
 
