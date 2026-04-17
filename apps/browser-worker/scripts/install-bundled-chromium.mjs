@@ -44,8 +44,16 @@ if (seedBundledBrowsersFromCache()) {
   process.exit(0);
 }
 
-const command = process.platform === "win32" ? "npx.cmd" : "npx";
-const completed = spawnSync(command, ["playwright", "install", "chromium"], {
+const npmExecPath = String(process.env.npm_execpath || "").trim();
+const command = npmExecPath && existsSync(npmExecPath)
+  ? process.execPath
+  : process.platform === "win32"
+    ? "npm.cmd"
+    : "npm";
+const commandArgs = npmExecPath && existsSync(npmExecPath)
+  ? [npmExecPath, "exec", "--", "playwright", "install", "chromium"]
+  : ["exec", "--", "playwright", "install", "chromium"];
+const completed = spawnSync(command, commandArgs, {
   cwd: workerRoot,
   stdio: "inherit",
   env: {
