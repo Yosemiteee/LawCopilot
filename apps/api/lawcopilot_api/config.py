@@ -12,7 +12,7 @@ ALLOWED_DEPLOYMENT_MODES = ("local-only", "cloud-assisted", "local-first-hybrid"
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "LawCopilot"
-    app_version: str = "0.7.0-pilot.2"
+    app_version: str = "0.7.0-pilot.3"
     office_id: str = "default-office"
     deployment_mode: str = "local-only"
     release_channel: str = "pilot"
@@ -175,7 +175,7 @@ def get_settings() -> Settings:
     )
     return Settings(
         app_name=os.getenv("LAWCOPILOT_APP_NAME", "LawCopilot"),
-        app_version=os.getenv("LAWCOPILOT_APP_VERSION", "0.7.0-pilot.2"),
+        app_version=os.getenv("LAWCOPILOT_APP_VERSION", "0.7.0-pilot.3"),
         office_id=os.getenv("LAWCOPILOT_OFFICE_ID", "default-office"),
         deployment_mode=_normalized_deployment_mode(os.getenv("LAWCOPILOT_DEPLOYMENT_MODE", "local-only")),
         release_channel=os.getenv("LAWCOPILOT_RELEASE_CHANNEL", "pilot"),

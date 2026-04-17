@@ -1253,8 +1253,8 @@ describe("SettingsPage", () => {
     expect(screen.queryByRole("button", { name: "Güncellemeyi indir" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Yeniden başlat ve kur" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Teknik ayarları göster"));
-    fireEvent.click(screen.getByText("Sunucu ayrıntılarını göster"));
-    const updateUrlInput = screen.getByPlaceholderText("https://updates.ornek.com/lawcopilot");
+    fireEvent.click(screen.getByText("Teknik ayrıntıları göster"));
+    const updateUrlInput = screen.getByPlaceholderText("İsteğe bağlı: https://updates.ornek.com/lawcopilot");
     fireEvent.change(updateUrlInput, { target: { value: "https://updates.example.com/lawcopilot" } });
     fireEvent.click(screen.getByRole("button", { name: "Güncelleme ayarlarını kaydet" }));
 

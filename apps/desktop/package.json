@@ -1,7 +1,7 @@
 {
   "name": "lawcopilot-desktop",
   "private": true,
-  "version": "0.7.0-pilot.2",
+  "version": "0.7.0-pilot.3",
   "description": "Pilot desktop shell for LawCopilot",
   "author": "LawCopilot Team",
   "main": "main.cjs",
@@ -23,10 +23,10 @@
     "build:backend": "node scripts/build-backend.cjs",
     "build:backend:windows": "node scripts/build-backend.cjs windows",
     "build:backend:macos": "node scripts/build-backend.cjs macos",
-    "package:dir": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --dir",
-    "package:linux": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --linux AppImage dir",
-    "package:windows": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:windows && electron-builder --win nsis --x64",
-    "package:macos": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:macos && electron-builder --mac dmg zip --universal",
+    "package:dir": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --dir --publish never",
+    "package:linux": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --linux AppImage dir --publish never",
+    "package:windows": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:windows && electron-builder --win nsis --x64 --publish never",
+    "package:macos": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:macos && electron-builder --mac dmg zip --universal --publish never",
     "package": "npm run package:dir"
   },
   "devDependencies": {
@@ -133,10 +133,10 @@
     "artifactName": "LawCopilot-${version}-${os}-${arch}.${ext}",
     "publish": [
       {
-        "provider": "generic",
-        "url": "https://updates.example.invalid/lawcopilot",
-        "channel": "latest",
-        "useMultipleRangeRequest": false
+        "provider": "github",
+        "owner": "Yosemiteee",
+        "repo": "LawCopilot",
+        "vPrefixedTagName": true
       }
     ],
     "nsis": {

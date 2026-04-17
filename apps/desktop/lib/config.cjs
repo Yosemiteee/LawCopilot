@@ -486,6 +486,9 @@ function defaultUpdaterConfig(releaseChannel = "") {
   const normalizedReleaseChannel = String(releaseChannel || "").trim().toLowerCase();
   return {
     enabled: true,
+    provider: String(process.env.LAWCOPILOT_UPDATE_PROVIDER || "github").trim().toLowerCase() || "github",
+    githubOwner: String(process.env.LAWCOPILOT_UPDATE_GITHUB_OWNER || "Yosemiteee").trim(),
+    githubRepo: String(process.env.LAWCOPILOT_UPDATE_GITHUB_REPO || "LawCopilot").trim(),
     feedUrl: String(process.env.LAWCOPILOT_UPDATE_FEED_URL || "").trim(),
     channel: String(process.env.LAWCOPILOT_UPDATE_CHANNEL || "latest").trim() || "latest",
     autoCheckOnLaunch: process.env.LAWCOPILOT_UPDATE_AUTO_CHECK !== "0",
@@ -503,6 +506,9 @@ function normalizeUpdaterConfigForWrite(updater, releaseChannel = "") {
   const value = updater && typeof updater === "object" ? updater : {};
   return {
     enabled: value.enabled ?? defaults.enabled,
+    provider: String(value.provider || defaults.provider).trim().toLowerCase() || defaults.provider,
+    githubOwner: String(value.githubOwner || defaults.githubOwner).trim(),
+    githubRepo: String(value.githubRepo || defaults.githubRepo).trim(),
     feedUrl: String(value.feedUrl || "").trim(),
     channel: String(value.channel || defaults.channel).trim() || defaults.channel,
     autoCheckOnLaunch: value.autoCheckOnLaunch ?? defaults.autoCheckOnLaunch,
@@ -521,7 +527,7 @@ function defaultDesktopConfig(repoRoot, options = {}) {
   const openAiDefaults = providerDefaults("openai");
   return {
     appName: "LawCopilot",
-    appVersion: "0.7.0-pilot.2",
+    appVersion: "0.7.0-pilot.3",
     officeId: process.env.LAWCOPILOT_OFFICE_ID || "default-office",
     deploymentMode: process.env.LAWCOPILOT_DEPLOYMENT_MODE || "local-first-hybrid",
     releaseChannel,

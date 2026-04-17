@@ -167,6 +167,9 @@ function buildAssistantSignals(profile: Partial<AssistantRuntimeProfile> | null 
 
 type DesktopUpdateDraft = {
   enabled: boolean;
+  provider: string;
+  githubOwner: string;
+  githubRepo: string;
   feedUrl: string;
   channel: string;
   autoCheckOnLaunch: boolean;
@@ -193,6 +196,9 @@ type DesktopUpdateStatus = DesktopUpdateDraft & {
 function createDefaultDesktopUpdateDraft(): DesktopUpdateDraft {
   return {
     enabled: true,
+    provider: "github",
+    githubOwner: "Yosemiteee",
+    githubRepo: "LawCopilot",
     feedUrl: "",
     channel: "latest",
     autoCheckOnLaunch: true,
@@ -206,6 +212,9 @@ function normalizeDesktopUpdateDraft(raw: Record<string, unknown> | null | undef
   const defaults = createDefaultDesktopUpdateDraft();
   return {
     enabled: typeof value.enabled === "boolean" ? Boolean(value.enabled) : defaults.enabled,
+    provider: String(value.provider || defaults.provider).trim().toLowerCase() || defaults.provider,
+    githubOwner: String(value.githubOwner || value.github_owner || defaults.githubOwner).trim() || defaults.githubOwner,
+    githubRepo: String(value.githubRepo || value.github_repo || defaults.githubRepo).trim() || defaults.githubRepo,
     feedUrl: String(value.feedUrl || value.feed_url || "").trim(),
     channel: String(value.channel || defaults.channel).trim() || defaults.channel,
     autoCheckOnLaunch: typeof value.autoCheckOnLaunch === "boolean"
@@ -223,10 +232,16 @@ function normalizeDesktopUpdateDraft(raw: Record<string, unknown> | null | undef
 function normalizeDesktopUpdateStatus(raw: Record<string, unknown> | null | undefined): DesktopUpdateStatus {
   const value = raw && typeof raw === "object" ? raw : {};
   const draft = normalizeDesktopUpdateDraft(value);
+  const isGithub = draft.provider === "github";
   return {
     ...draft,
     status: String(value.status || "idle").trim() || "idle",
-    configured: Boolean(value.configured ?? Boolean(draft.feedUrl && draft.enabled)),
+    configured: Boolean(
+      value.configured
+        ?? (isGithub
+          ? Boolean(draft.enabled && draft.githubOwner && draft.githubRepo)
+          : Boolean(draft.enabled && draft.feedUrl)),
+    ),
     supported: Boolean(value.supported),
     support_reason: String(value.support_reason || "").trim(),
     support_message: String(value.support_message || "").trim(),
@@ -1690,9 +1705,12 @@ export function SettingsPage() {
     }
     setIsSavingDesktopUpdate(true);
     try {
-      const saved = await window.lawcopilotDesktop.saveStoredConfig({
+        const saved = await window.lawcopilotDesktop.saveStoredConfig({
         updater: {
           enabled: desktopUpdateDraft.enabled,
+          provider: desktopUpdateDraft.provider,
+          githubOwner: desktopUpdateDraft.githubOwner,
+          githubRepo: desktopUpdateDraft.githubRepo,
           feedUrl: desktopUpdateDraft.feedUrl,
           channel: desktopUpdateDraft.channel,
           autoCheckOnLaunch: desktopUpdateDraft.autoCheckOnLaunch,
@@ -2769,6 +2787,14 @@ export function SettingsPage() {
                           <summary className="setup-form-details__summary">{sozluk.settings.desktopUpdateTechnicalToggle}</summary>
                           <div className="stack">
                             <p style={{ color: "var(--text-muted)", marginBottom: 0 }}>{sozluk.settings.desktopUpdateTechnicalDescription}</p>
+                            <div className="callout">
+                              <strong>{sozluk.settings.desktopUpdateSourceTitle}</strong>
+                              <p style={{ marginBottom: 0 }}>
+                                {sozluk.settings.desktopUpdateSourceDescription
+                                  .replace("{provider}", desktopUpdateDraft.provider === "github" ? "GitHub Releases" : "özel update sunucusu")
+                                  .replace("{repo}", `${desktopUpdateDraft.githubOwner}/${desktopUpdateDraft.githubRepo}`)}
+                              </p>
+                            </div>
                             <div className="field-grid field-grid--two">
                               <label className="stack stack--tight">
                                 <span>{sozluk.settings.desktopUpdateUrlLabel}</span>

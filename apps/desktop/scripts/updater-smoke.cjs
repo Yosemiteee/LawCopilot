@@ -79,7 +79,10 @@ async function main() {
     releaseChannel: "pilot",
     updater: {
       enabled: true,
-      feedUrl: "https://updates.example.com/lawcopilot",
+      provider: "github",
+      githubOwner: "Yosemiteee",
+      githubRepo: "LawCopilot",
+      feedUrl: "",
       channel: "pilot",
       autoCheckOnLaunch: true,
       autoDownload: false,
@@ -94,7 +97,7 @@ async function main() {
   const desktopUpdater = createDesktopUpdater({
     app: {
       isPackaged: true,
-      getVersion: () => "0.7.0-pilot.2",
+      getVersion: () => "0.7.0-pilot.3",
     },
     autoUpdater: fakeAutoUpdater,
     loadConfig: () => configStore,
@@ -118,8 +121,10 @@ async function main() {
   const initialStatus = desktopUpdater.getStatus();
   assert.strictEqual(initialStatus.configured, true);
   assert.strictEqual(initialStatus.supported, true);
-  assert.strictEqual(fakeAutoUpdater.feedOptions.url, "https://updates.example.com/lawcopilot");
-  assert.strictEqual(fakeAutoUpdater.feedOptions.channel, "pilot");
+  assert.strictEqual(fakeAutoUpdater.feedOptions.provider, "github");
+  assert.strictEqual(fakeAutoUpdater.feedOptions.owner, "Yosemiteee");
+  assert.strictEqual(fakeAutoUpdater.feedOptions.repo, "LawCopilot");
+  assert.strictEqual(fakeAutoUpdater.feedOptions.releaseType, "prerelease");
 
   const availableStatus = await desktopUpdater.checkForUpdates("manual");
   assert.strictEqual(availableStatus.status, "available");

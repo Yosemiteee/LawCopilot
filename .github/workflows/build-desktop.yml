@@ -32,6 +32,8 @@ jobs:
           name: lawcopilot-windows
           path: |
             apps/desktop/dist/*.exe
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest*.yml
             artifacts/windows-build-artifacts.json
           if-no-files-found: error
 

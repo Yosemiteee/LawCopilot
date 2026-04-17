@@ -1,4 +1,4 @@
-# Release Checklist (0.7.0-pilot.2)
+# Release Checklist (0.7.0-pilot.3)
 
 ## Build & Quality
 - [ ] `scripts/check.sh` çalıştırıldı ve geçti

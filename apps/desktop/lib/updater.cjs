@@ -50,6 +50,9 @@ function buildDefaultStatus(currentVersion = "") {
     status: "idle",
     configured: false,
     supported: false,
+    provider: "github",
+    github_owner: "",
+    github_repo: "",
     support_reason: "",
     support_message: "",
     current_version: String(currentVersion || "").trim(),
@@ -69,10 +72,18 @@ function buildDefaultStatus(currentVersion = "") {
 }
 
 function applyUpdaterConfigToStatus(status, config, support) {
+  const provider = String(config.provider || "github").trim().toLowerCase() || "github";
+  const isGithub = provider === "github";
+  const githubOwner = String(config.githubOwner || "").trim();
+  const githubRepo = String(config.githubRepo || "").trim();
+  const configured = isGithub ? Boolean(config.enabled && githubOwner && githubRepo) : Boolean(config.enabled && config.feedUrl);
   return {
     ...status,
-    configured: Boolean(config.enabled && config.feedUrl),
+    configured,
     supported: Boolean(support.supported),
+    provider,
+    github_owner: githubOwner,
+    github_repo: githubRepo,
     support_reason: String(support.reason || ""),
     support_message: String(support.message || ""),
     feed_url: normalizeFeedUrl(config.feedUrl),
@@ -137,6 +148,9 @@ function createDesktopUpdater(options = {}) {
     });
     const nextConfig = {
       enabled: updaterConfig.enabled ?? true,
+      provider: String(updaterConfig.provider || "github").trim().toLowerCase() || "github",
+      githubOwner: String(updaterConfig.githubOwner || process.env.LAWCOPILOT_UPDATE_GITHUB_OWNER || "Yosemiteee").trim(),
+      githubRepo: String(updaterConfig.githubRepo || process.env.LAWCOPILOT_UPDATE_GITHUB_REPO || "LawCopilot").trim(),
       feedUrl: normalizeFeedUrl(updaterConfig.feedUrl),
       channel: String(updaterConfig.channel || "latest").trim() || "latest",
       autoCheckOnLaunch: updaterConfig.autoCheckOnLaunch ?? true,
@@ -154,13 +168,24 @@ function createDesktopUpdater(options = {}) {
       updater.allowPrerelease = Boolean(nextConfig.allowPrerelease);
     }
 
-    if (support.supported && nextConfig.enabled && nextConfig.feedUrl) {
-      updater.setFeedURL({
-        provider: "generic",
-        url: nextConfig.feedUrl,
-        channel: nextConfig.channel,
-        useMultipleRangeRequest: false,
-      });
+    if (support.supported && nextConfig.enabled) {
+      if (nextConfig.provider === "github" && nextConfig.githubOwner && nextConfig.githubRepo) {
+        updater.setFeedURL({
+          provider: "github",
+          owner: nextConfig.githubOwner,
+          repo: nextConfig.githubRepo,
+          private: false,
+          releaseType: nextConfig.allowPrerelease ? "prerelease" : "release",
+          vPrefixedTagName: true,
+        });
+      } else if (nextConfig.feedUrl) {
+        updater.setFeedURL({
+          provider: "generic",
+          url: nextConfig.feedUrl,
+          channel: nextConfig.channel,
+          useMultipleRangeRequest: false,
+        });
+      }
     }
 
     state = applyUpdaterConfigToStatus(state, nextConfig, support);
@@ -286,7 +311,15 @@ function createDesktopUpdater(options = {}) {
         download_percent: 0,
       });
     }
-    if (!config.feedUrl) {
+    if (config.provider === "github") {
+      if (!config.githubOwner || !config.githubRepo) {
+        return updateState({
+          status: "unconfigured",
+          last_error: "",
+          download_percent: 0,
+        });
+      }
+    } else if (!config.feedUrl) {
       return updateState({
         status: "unconfigured",
         last_error: "",
@@ -320,7 +353,11 @@ function createDesktopUpdater(options = {}) {
     if (!support.supported) {
       return updateState({ status: "unsupported" });
     }
-    if (!config.feedUrl) {
+    if (config.provider === "github") {
+      if (!config.githubOwner || !config.githubRepo) {
+        return updateState({ status: "unconfigured" });
+      }
+    } else if (!config.feedUrl) {
       return updateState({ status: "unconfigured" });
     }
     try {
@@ -364,7 +401,10 @@ function createDesktopUpdater(options = {}) {
 
   async function maybeAutoCheckOnLaunch() {
     const { config, support } = refreshFromConfig();
-    if (!config.enabled || !config.autoCheckOnLaunch || !config.feedUrl || !support.supported) {
+    const sourceReady = config.provider === "github"
+      ? Boolean(config.githubOwner && config.githubRepo)
+      : Boolean(config.feedUrl);
+    if (!config.enabled || !config.autoCheckOnLaunch || !sourceReady || !support.supported) {
       return state;
     }
     return checkForUpdates("launch");

@@ -1,16 +1,19 @@
 # Desktop Auto Update
 
-LawCopilot masaüstü uygulaması artık tek seferlik kurulumdan sonra yerinde güncelleme akışına hazırdır.
+LawCopilot masaüstü uygulaması artık varsayılan olarak **GitHub Releases** üzerinden uygulama içi güncelleme alacak şekilde hazırdır.
 
 ## Ne çalışıyor
 
 - Electron ana sürecinde `electron-updater` tabanlı update controller var.
-- Ayarlar ekranında update feed URL, kanal, açılışta kontrol ve otomatik indirme ayarları yönetiliyor.
+- Varsayılan update provider `github`:
+  - owner: `Yosemiteee`
+  - repo: `LawCopilot`
 - Kullanıcı uygulama içinden:
   - yeni sürüm kontrolü başlatabilir
   - bulunan sürümü indirebilir
   - indirilen sürümü yeniden başlatıp kurabilir
-- Update durumu preload bridge ile UI’a canlı aktarılıyor.
+- Update durumu preload bridge ile UI'a canlı aktarılır.
+- İleri seviye ayarlarda özel bir update sunucusuna geçmek hâlâ mümkündür, ama normal kullanımda gerekmez.
 
 ## Paket desteği
 
@@ -21,23 +24,26 @@ LawCopilot masaüstü uygulaması artık tek seferlik kurulumdan sonra yerinde g
 
 ## Nasıl publish edilir
 
-Uygulama generic HTTP update feed kullanacak şekilde hazırlandı.
+Beklenen yaklaşım GitHub release tag akışıdır:
 
-Beklenen yaklaşım:
-
-1. Yeni sürüm için uygun paketleri üret:
-   - Linux: `npm run package:linux`
-   - Windows: `npm run package:windows`
-   - macOS: `npm run package:macos`
-2. Oluşan update metadata ve paket dosyalarını bir HTTP dizinine yükle.
-3. Son kullanıcı makinesinde bir kez `Güncelleme sunucusu` alanına bu dizinin URL’i kaydedilsin.
-4. Sonraki sürümlerde kullanıcı uygulama içinden yeni sürümü alır.
+1. Yeni sürüm numarasını güncelle.
+2. İlgili değişiklikleri `main` branch'ine push et.
+3. Release tag oluştur ve push et:
+   - `git tag v0.7.0-pilot.3`
+   - `git push origin v0.7.0-pilot.3`
+4. GitHub Actions `release-desktop` workflow'u:
+   - Windows `.exe`
+   - `.blockmap`
+   - `latest*.yml`
+   dosyalarını release'e yükler.
+5. Test kullanıcıları uygulama içinden `Yeni sürümü kontrol et > Güncellemeyi indir > Yeniden başlat ve kur` ile geçer.
 
 ## Dikkat edilmesi gerekenler
 
-- Linux kullanıcısı unpacked klasörden değil `AppImage` üzerinden kurulum yapmalı.
-- Update feed URL boşsa uygulama sürüm kontrolü yapmaz.
-- Bu yapı client tarafını çözer; release hosting hâlâ sizin yayın altyapınıza bağlıdır.
+- Windows auto-update için GitHub Release artefact'larında `.exe + .blockmap + latest*.yml` birlikte bulunmalıdır.
+- Linux kullanıcısı unpacked klasörden değil `AppImage` üzerinden kurulum yapmalıdır.
+- GitHub provider kullanıldığı için son kullanıcıdan update URL girilmesi beklenmez.
+- Özel feed URL alanı yalnız override ihtiyacı olan dağıtımlar içindir.
 
 ## Test
 

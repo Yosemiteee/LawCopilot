@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release etiketi (ornek: v0.7.0-pilot.2)"
+        description: "Release etiketi (ornek: v0.7.0-pilot.3)"
         required: true
         type: string
 
@@ -58,4 +58,6 @@ jobs:
           prerelease: ${{ contains(steps.release_meta.outputs.tag, 'pilot') }}
           files: |
             apps/desktop/dist/*.exe
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest*.yml
             artifacts/windows-build-artifacts.json
