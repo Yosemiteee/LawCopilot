@@ -16,7 +16,16 @@ function fileMtime(targetPath) {
 }
 
 function runNpm(args) {
-  const result = spawnSync("npm", args, {
+  const npmExecPath = String(process.env.npm_execpath || "").trim();
+  const command = npmExecPath && fs.existsSync(npmExecPath)
+    ? process.execPath
+    : process.platform === "win32"
+      ? "npm.cmd"
+      : "npm";
+  const commandArgs = npmExecPath && fs.existsSync(npmExecPath)
+    ? [npmExecPath, ...args]
+    : args;
+  const result = spawnSync(command, commandArgs, {
     cwd: workerRoot,
     stdio: "inherit",
     env: process.env,
