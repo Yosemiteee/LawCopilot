@@ -67,7 +67,7 @@ export function MattersPage() {
         )}
       </SectionCard>
 
-      <SectionCard title="Yeni dosya oluştur" subtitle="İlk kayıt hafif tutulur; ayrıntılar dosya ekranında zenginleştirilir.">
+      <SectionCard title="Yeni dosya oluştur" subtitle="İlk kayıt hafif tutulur; ayrıntılar dosya ekranında zenginleştirilir." className="sticky-panel">
         <form
           className="field-grid"
           onSubmit={(event) => {

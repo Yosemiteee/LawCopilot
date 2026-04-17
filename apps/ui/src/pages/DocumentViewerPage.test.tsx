@@ -76,9 +76,12 @@ describe("DocumentViewerPage", () => {
       storedSettings: { workspaceConfigured: true, workspaceRootName: "Deneme Belgeleri" }
     });
 
-    await waitFor(() => expect(screen.getAllByText("Belge görüntüleyici").length).toBeGreaterThan(0));
-    expect(screen.getByText("Kira İhtarı")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Kira İhtarı")).toBeInTheDocument());
+    expect(screen.getAllByText("Belge görüntüleyici").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Seçili pasaj").length).toBeGreaterThan(0);
     expect(screen.getByText("Dayanak pasajı vurgulandı. Metin eşleşmesi yaklaşık ise en yakın parça seçildi.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sistem uygulamasında aç" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Klasörde göster" })).toBeDisabled();
+    expect(screen.getByText("Sistem uygulaması kısayolları yalnız masaüstü runtime hazır olduğunda açılır.")).toBeInTheDocument();
   });
 });

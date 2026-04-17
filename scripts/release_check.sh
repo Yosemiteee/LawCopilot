@@ -33,6 +33,13 @@ else
   record "FAIL" "scripts/check.sh" "Detay: /tmp/lawcopilot_check.err"
 fi
 
+# 1b) Epistemic eval harness
+if "$ROOT/scripts/run_eval_suite.sh" >/tmp/lawcopilot_eval_suite.out 2>/tmp/lawcopilot_eval_suite.err; then
+  record "PASS" "scripts/run_eval_suite.sh" "Epistemic contamination / precedence / policy eval seti geçti"
+else
+  record "FAIL" "scripts/run_eval_suite.sh" "Detay: /tmp/lawcopilot_eval_suite.err"
+fi
+
 # 2) API smoke
 if "$ROOT/scripts/smoke_api.sh" >/tmp/lawcopilot_api_smoke.out 2>/tmp/lawcopilot_api_smoke.err; then
   record "PASS" "scripts/smoke_api.sh" "API boot + health + telemetry smoke geçti"
@@ -45,6 +52,13 @@ if "$ROOT/scripts/smoke_desktop.sh" >/tmp/lawcopilot_desktop_smoke.out 2>/tmp/la
   record "PASS" "scripts/smoke_desktop.sh" "Desktop config + backend boot smoke geçti"
 else
   record "FAIL" "scripts/smoke_desktop.sh" "Detay: /tmp/lawcopilot_desktop_smoke.err"
+fi
+
+# 3b) Pilot diagnostics snapshot
+if "$ROOT/scripts/pilot_diagnostics.sh" >/tmp/lawcopilot_pilot_diag.out 2>/tmp/lawcopilot_pilot_diag.err; then
+  record "PASS" "scripts/pilot_diagnostics.sh" "Pilot telemetry + health summary snapshot üretildi"
+else
+  record "FAIL" "scripts/pilot_diagnostics.sh" "Detay: /tmp/lawcopilot_pilot_diag.err"
 fi
 
 # 4) Desktop packaging (dir target + bundled backend)

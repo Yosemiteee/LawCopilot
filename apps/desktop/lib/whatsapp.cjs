@@ -10,6 +10,52 @@ async function parseJson(response) {
   }
 }
 
+const WHATSAPP_REQUEST_TIMEOUT_MS = Number(process.env.LAWCOPILOT_WHATSAPP_REQUEST_TIMEOUT_MS || 15000);
+const {
+  disconnectWhatsAppWeb,
+  getWhatsAppWebStatus,
+  sendWhatsAppWebMessage,
+  setWhatsAppWebBridgeContext,
+  startWhatsAppWebLink,
+  syncWhatsAppWebData,
+} = require("./whatsapp-web-bridge.cjs");
+
+function normalizeWhatsAppMode(value, fallback = "web") {
+  const mode = String(value || fallback || "").trim().toLowerCase();
+  if (mode === "business_cloud" || mode === "web") {
+    return mode;
+  }
+  return fallback;
+}
+
+function resolveWhatsAppMode(configOrInput) {
+  const whatsapp = configOrInput?.whatsapp && typeof configOrInput.whatsapp === "object"
+    ? configOrInput.whatsapp
+    : configOrInput && typeof configOrInput === "object"
+      ? configOrInput
+      : {};
+  if (String(whatsapp.mode || "").trim()) {
+    return normalizeWhatsAppMode(whatsapp.mode);
+  }
+  if (whatsapp.phoneNumberId || whatsapp.accessToken) {
+    return "business_cloud";
+  }
+  return "web";
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = WHATSAPP_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function graphBaseUrl() {
   return String(process.env.LAWCOPILOT_WHATSAPP_GRAPH_BASE_URL || "https://graph.facebook.com/v22.0").replace(/\/+$/, "");
 }
@@ -19,10 +65,15 @@ function responseMessage(payload, fallback) {
 }
 
 function getWhatsAppStatus(config) {
+  const mode = resolveWhatsAppMode(config);
+  if (mode === "web") {
+    return getWhatsAppWebStatus(config);
+  }
   const whatsapp = config?.whatsapp || {};
   const configured = Boolean(whatsapp.enabled && whatsapp.accessToken && whatsapp.phoneNumberId);
   return {
     provider: "whatsapp",
+    mode: "business_cloud",
     authStatus: configured ? "bagli" : "hazir_degil",
     configured,
     enabled: Boolean(whatsapp.enabled),
@@ -38,6 +89,18 @@ function getWhatsAppStatus(config) {
 }
 
 async function validateWhatsAppConfig(input) {
+  if (resolveWhatsAppMode(input) === "web") {
+    return {
+      ok: true,
+      message: "WhatsApp Web modu için doğrulama QR ile bağlantı başlatıldığında yapılır.",
+      whatsapp: {
+        enabled: Boolean(input?.enabled ?? true),
+        mode: "web",
+        validationStatus: "pending",
+        lastValidatedAt: "",
+      },
+    };
+  }
   const accessToken = String(input?.accessToken || "").trim();
   const phoneNumberId = String(input?.phoneNumberId || "").trim();
   const businessLabel = String(input?.businessLabel || "").trim();
@@ -46,7 +109,7 @@ async function validateWhatsAppConfig(input) {
     throw new Error("WhatsApp doğrulaması için erişim belirteci ve telefon numarası kimliği gerekli.");
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${graphBaseUrl()}/${encodeURIComponent(phoneNumberId)}?fields=display_phone_number,verified_name`,
     {
       headers: {
@@ -64,6 +127,7 @@ async function validateWhatsAppConfig(input) {
     message: "WhatsApp bağlantısı doğrulandı.",
     whatsapp: {
       enabled: Boolean(input?.enabled ?? true),
+      mode: "business_cloud",
       businessLabel: businessLabel || String(payload.verified_name || payload.display_phone_number || "WhatsApp"),
       verifiedName: String(payload.verified_name || ""),
       displayPhoneNumber: String(payload.display_phone_number || ""),
@@ -75,6 +139,9 @@ async function validateWhatsAppConfig(input) {
 }
 
 async function syncWhatsAppData(config, runtimeInfo) {
+  if (resolveWhatsAppMode(config) === "web") {
+    return syncWhatsAppWebData(config, runtimeInfo);
+  }
   if (!runtimeInfo?.apiBaseUrl || !runtimeInfo?.sessionToken) {
     throw new Error("Yerel servis oturumu hazır değil.");
   }
@@ -83,7 +150,7 @@ async function syncWhatsAppData(config, runtimeInfo) {
     throw new Error("WhatsApp hesabı bağlı değil.");
   }
   const syncedAt = new Date().toISOString();
-  const response = await fetch(`${runtimeInfo.apiBaseUrl}/integrations/whatsapp/sync`, {
+  const response = await fetchWithTimeout(`${runtimeInfo.apiBaseUrl}/integrations/whatsapp/sync`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -116,6 +183,9 @@ async function syncWhatsAppData(config, runtimeInfo) {
 }
 
 async function sendWhatsAppMessage(config, payload = {}) {
+  if (resolveWhatsAppMode(config) === "web") {
+    return sendWhatsAppWebMessage(config, payload);
+  }
   const whatsapp = config?.whatsapp || {};
   if (!whatsapp.enabled || !whatsapp.accessToken || !whatsapp.phoneNumberId) {
     throw new Error("WhatsApp hesabı bağlı değil.");
@@ -125,7 +195,7 @@ async function sendWhatsAppMessage(config, payload = {}) {
   if (!to || !text) {
     throw new Error("WhatsApp gönderimi için hedef numara ve mesaj gerekli.");
   }
-  const response = await fetch(`${graphBaseUrl()}/${encodeURIComponent(String(whatsapp.phoneNumberId))}/messages`, {
+  const response = await fetchWithTimeout(`${graphBaseUrl()}/${encodeURIComponent(String(whatsapp.phoneNumberId))}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${whatsapp.accessToken}`,
@@ -154,9 +224,38 @@ async function sendWhatsAppMessage(config, payload = {}) {
   };
 }
 
+async function connectWhatsAppWeb(config) {
+  return startWhatsAppWebLink(config);
+}
+
+async function disconnectWhatsApp(config) {
+  if (resolveWhatsAppMode(config) === "web") {
+    return disconnectWhatsAppWeb(config);
+  }
+  return {
+    ok: true,
+    message: "WhatsApp bağlantısı kaldırıldı.",
+    patch: {
+      whatsapp: {
+        enabled: false,
+        accessToken: "",
+        phoneNumberId: "",
+        businessLabel: "",
+        displayPhoneNumber: "",
+        verifiedName: "",
+        validationStatus: "pending",
+        lastSyncAt: "",
+      },
+    },
+  };
+}
+
 module.exports = {
+  connectWhatsAppWeb,
+  disconnectWhatsApp,
   getWhatsAppStatus,
   sendWhatsAppMessage,
+  setWhatsAppWebBridgeContext,
   syncWhatsAppData,
   validateWhatsAppConfig,
 };

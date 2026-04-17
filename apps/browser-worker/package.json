@@ -1,0 +1,23 @@
+{
+  "name": "lawcopilot-browser-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright-based browser worker for LawCopilot",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "npm run build",
+    "install:chromium": "npx playwright install chromium",
+    "install:chromium:bundled": "node scripts/install-bundled-chromium.mjs",
+    "start": "node dist/index.js",
+    "start:server": "node dist/index.js --server"
+  },
+  "dependencies": {
+    "playwright": "^1.54.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "typescript": "^5.9.2"
+  }
+}

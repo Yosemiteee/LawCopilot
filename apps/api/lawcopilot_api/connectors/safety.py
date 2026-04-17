@@ -12,19 +12,41 @@ PII_PATTERNS = [
 ]
 PROMPT_INJECTION_PATTERNS = [
     re.compile(r"ignore (all|the|previous) instructions", re.IGNORECASE),
+    re.compile(r"(önceki|yukarıdaki) talimat(lar)?ı? (yok say|görmezden gel)", re.IGNORECASE),
     re.compile(r"system prompt", re.IGNORECASE),
+    re.compile(r"sistem istemi|geliştirici mesajı|gizli talimat", re.IGNORECASE),
     re.compile(r"developer message", re.IGNORECASE),
     re.compile(r"reveal .*secret", re.IGNORECASE),
+    re.compile(r"gizli .*?(açıkla|göster)|token.?ı? gönder|veri sızdır", re.IGNORECASE),
     re.compile(r"exfiltrat", re.IGNORECASE),
     re.compile(r"send .*token", re.IGNORECASE),
+    re.compile(r"araç çağır|komut çalıştır|terminal(?:de)? çalıştır", re.IGNORECASE),
     re.compile(r"<system>|</system>|BEGIN PROMPT", re.IGNORECASE),
 ]
+UNTRUSTED_CONTEXT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("ignore_instructions", re.compile(r"ignore (all|the|previous|above) instructions", re.IGNORECASE)),
+    ("ignore_instructions_tr", re.compile(r"(önceki|yukarıdaki) talimat(lar)?ı? (yok say|görmezden gel)", re.IGNORECASE)),
+    ("system_prompt_reference", re.compile(r"system prompt|developer message|hidden instruction", re.IGNORECASE)),
+    ("system_prompt_reference_tr", re.compile(r"sistem istemi|geliştirici mesajı|gizli talimat", re.IGNORECASE)),
+    ("secret_exfiltration", re.compile(r"reveal .*secret|send .*token|exfiltrat", re.IGNORECASE)),
+    ("secret_exfiltration_tr", re.compile(r"gizli .*?(açıkla|göster)|token.?ı? gönder|veri sızdır", re.IGNORECASE)),
+    ("tool_execution", re.compile(r"call (a )?tool|function call|run command|execute .*command", re.IGNORECASE)),
+    ("tool_execution_tr", re.compile(r"araç çağır|komut çalıştır|terminal(?:de)? çalıştır", re.IGNORECASE)),
+    ("prompt_markup", re.compile(r"<system>|</system>|begin prompt|end prompt", re.IGNORECASE)),
+)
 
 
 @dataclass
 class ConnectorPolicy:
     allowed_domains: tuple[str, ...]
     dry_run: bool = True
+
+
+@dataclass
+class UntrustedTextAssessment:
+    sanitized_text: str
+    quarantined: bool
+    matched_rules: tuple[str, ...]
 
 
 class ConnectorSafetyWrapper:
@@ -71,3 +93,27 @@ class ConnectorSafetyWrapper:
             "dry_run": self.policy.dry_run,
             "status": "blocked_review" if unsafe_reason else ("queued_preview" if self.policy.dry_run else "ready_to_send"),
         }
+
+
+def assess_untrusted_text(text: str, *, max_chars: int = 320) -> UntrustedTextAssessment:
+    compact = " ".join(str(text or "").split()).strip()
+    if len(compact) > max_chars:
+        compact = compact[: max_chars - 1].rstrip() + "…"
+
+    sanitized = compact
+    matched_rules: list[str] = []
+    for label, pattern in UNTRUSTED_CONTEXT_PATTERNS:
+        if pattern.search(sanitized):
+            matched_rules.append(label)
+            sanitized = pattern.sub("[redacted-untrusted-instruction]", sanitized)
+
+    if not sanitized:
+        sanitized = "[boş içerik]"
+    if matched_rules and sanitized == compact:
+        sanitized = "[redacted-untrusted-instruction]"
+
+    return UntrustedTextAssessment(
+        sanitized_text=sanitized,
+        quarantined=bool(matched_rules),
+        matched_rules=tuple(dict.fromkeys(matched_rules)),
+    )

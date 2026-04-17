@@ -13,7 +13,7 @@ WORKSPACE_AGENTS_TEXT = """# LawCopilot Runtime
 Bu çalışma alanı LawCopilot Kişisel Asistanı tarafından yönetilir.
 
 Rolün:
-Sen kaynak dayanaklı, Türkçe çalışan bir hukuk çalışma asistanısın.
+Sen kaynak dayanaklı, Türkçe çalışan, genel amaçlı bir kişisel ve iş asistanısın.
 
 Kurallar:
 - Cevaplarını daima Türkçe, doğal ve profesyonel bir dille yaz.
@@ -38,7 +38,7 @@ class OpenClawRuntime:
     def __init__(
         self,
         *,
-        state_dir: Path,
+        state_dir: Path | None,
         image: str,
         timeout_seconds: int = 75,
         provider_type: str = "",
@@ -58,6 +58,7 @@ class OpenClawRuntime:
             self.provider_type == "openai-codex"
             and self.provider_configured
             and bool(self._docker_binary)
+            and self.state_dir is not None
             and self.state_dir.exists()
         )
 
@@ -102,7 +103,7 @@ class OpenClawRuntime:
         if completed.returncode != 0:
             return OpenClawResult(ok=False, error=raw_output or "openclaw_runtime_failed")
 
-        payload = self._parse_json_output(completed.stdout)
+        payload = self._parse_json_output(completed.stdout) or self._parse_json_output(completed.stderr)
         if not payload:
             return OpenClawResult(ok=False, error="openclaw_runtime_invalid_json")
 
@@ -179,7 +180,7 @@ class OpenClawRuntime:
 
 
 def create_openclaw_runtime(settings: Any) -> OpenClawRuntime:
-    state_dir = Path(settings.openclaw_state_dir).expanduser() if settings.openclaw_state_dir else Path()
+    state_dir = Path(settings.openclaw_state_dir).expanduser() if str(settings.openclaw_state_dir or "").strip() else None
     return OpenClawRuntime(
         state_dir=state_dir,
         image=settings.openclaw_image,

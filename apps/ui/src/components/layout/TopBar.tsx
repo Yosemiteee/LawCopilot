@@ -1,6 +1,18 @@
 import { sozluk } from "../../i18n";
 import { useLocation, useNavigate } from "react-router-dom";
 
+function WorkspacePanelIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+      <path d="M9 4.5v15" />
+      <path d="M12.5 9h4" />
+      <path d="M12.5 12.5h4" />
+      <path d="M12.5 16h2.5" />
+    </svg>
+  );
+}
+
 export function TopBar({
   toolsOpen,
   onToggleTools,
@@ -12,12 +24,38 @@ export function TopBar({
   const navigate = useNavigate();
   const isSettingsRoute = location.pathname === "/settings";
   const isAssistantRoute = location.pathname === "/assistant";
-  const showToolsButton = isAssistantRoute && Boolean(onToggleTools) && !toolsOpen;
+  const isMemoryRoute = location.pathname === "/memory" || location.pathname === "/knowledge";
+  const isPersonalModelRoute = location.pathname === "/personal-model" || location.pathname === "/profile-model";
+  const isWorkspaceRoute = location.pathname === "/workspace" || location.pathname === "/_embedded/workspace";
+  const showReturnToAssistant = isSettingsRoute || isWorkspaceRoute || isMemoryRoute || isPersonalModelRoute;
+
+  if (isAssistantRoute) {
+    return (
+      <header className="app-shell__topbar app-shell__topbar--overlay">
+        <div className="app-shell__topbar-group app-shell__topbar-group--left" />
+        <div className="app-shell__topbar-group app-shell__topbar-group--right">
+          {!toolsOpen && onToggleTools ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={onToggleTools}
+              aria-label={sozluk.topBar.tools}
+              aria-pressed={toolsOpen}
+              title={sozluk.topBar.tools}
+              style={{ padding: "0.62rem", marginRight: "0.35rem", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <WorkspacePanelIcon />
+            </button>
+          ) : null}
+        </div>
+      </header>
+    );
+  }
 
   return (
-    <header className={`app-shell__topbar${isAssistantRoute ? " app-shell__topbar--overlay" : ""}`}>
+    <header className="app-shell__topbar">
       <div className="app-shell__topbar-group app-shell__topbar-group--left">
-        {isSettingsRoute ? (
+        {showReturnToAssistant ? (
           <button
             className="button button--secondary"
             type="button"
@@ -48,19 +86,7 @@ export function TopBar({
           <span style={{ fontWeight: 600, fontSize: "1rem", fontFamily: "var(--font-heading)" }}>{sozluk.app.name}</span>
         )}
       </div>
-      <div className="app-shell__topbar-group app-shell__topbar-group--right">
-        {showToolsButton ? (
-          <button
-            className="button button--secondary"
-            type="button"
-            onClick={onToggleTools}
-            aria-pressed={toolsOpen}
-            style={{ padding: "0.65rem 1rem" }}
-          >
-            {sozluk.topBar.tools}
-          </button>
-        ) : null}
-      </div>
+      <div className="app-shell__topbar-group app-shell__topbar-group--right" />
     </header>
   );
 }

@@ -1,16 +1,19 @@
 :root {
   --font-root-size: clamp(14px, 0.24vw + 11.8px, 16px);
+  --font-scale-factor: 1;
   --content-max-width: min(100%, clamp(760px, 78vw, 1180px));
-  --chat-max-width: min(100%, clamp(720px, 72vw, 1040px));
-  --composer-max-width: min(100%, clamp(640px, 68vw, 840px));
+  --chat-max-width: min(calc(100% - 2rem), 840px);
+  --composer-max-width: min(calc(100% - 2rem), 840px);
   --sidebar-width: clamp(220px, 18vw, 260px);
   --drawer-default-width: clamp(340px, 31vw, 540px);
   --topbar-button-size: clamp(2.6rem, 2.2rem + 0.6vw, 3rem);
   --bg-canvas: #f4f1eb;
+  --bg-canvas-rgb: 244, 241, 235;
   --bg-page-radial: rgba(214, 203, 189, 0.24);
   --bg-page-start: #f7f4ef;
   --bg-page-end: #ece8e0;
   --bg-panel: #f8f5ef;
+  --bg-panel-rgb: 248, 245, 239;
   --bg-panel-strong: #fbf8f2;
   --bg-ink: #161514;
   --bg-subtle: #ece7df;
@@ -29,8 +32,8 @@
   --bg-sidebar-callout: #e8e1d8;
   --line-soft: rgba(49, 41, 31, 0.1);
   --line-strong: rgba(49, 41, 31, 0.17);
-  --accent-line: rgba(121, 103, 242, 0.32);
-  --accent-ring: rgba(121, 103, 242, 0.14);
+  --accent-line: rgba(113, 113, 122, 0.32);
+  --accent-ring: rgba(113, 113, 122, 0.14);
   --sidebar-line: rgba(49, 41, 31, 0.08);
   --sidebar-line-strong: rgba(49, 41, 31, 0.12);
   --text-strong: #191714;
@@ -40,13 +43,14 @@
   --text-sidebar-muted: rgba(35, 33, 29, 0.82);
   --text-sidebar-subtle: rgba(35, 33, 29, 0.64);
   --text-sidebar-faint: rgba(35, 33, 29, 0.48);
-  --accent: #7967f2;
-  --accent-soft: rgba(121, 103, 242, 0.1);
+  --accent: #71717a;
+  --accent-rgb: 113, 113, 122;
+  --accent-soft: rgba(113, 113, 122, 0.1);
   --warning: #b67318;
   --warning-soft: rgba(182, 115, 24, 0.12);
   --danger: #b23b3b;
   --danger-soft: rgba(178, 59, 59, 0.12);
-  --highlight-bg: rgba(121, 103, 242, 0.18);
+  --highlight-bg: rgba(113, 113, 122, 0.18);
   --button-primary-bg: #161514;
   --button-primary-text: #ffffff;
   --button-secondary-text: #302d28;
@@ -56,7 +60,38 @@
   --radius-md: clamp(12px, 10px + 0.24vw, 14px);
   --radius-sm: clamp(9px, 8px + 0.15vw, 10px);
   --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-heading: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: Outfit, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Radius */
+  --radius-xs: clamp(6px, 5px + 0.1vw, 7px);
+
+  /* Enhanced Shadows */
+  --shadow-xs: 0 1px 2px rgba(44, 34, 24, 0.04);
+  --shadow-sm: 0 2px 6px rgba(44, 34, 24, 0.045), 0 1px 2px rgba(44, 34, 24, 0.03);
+  --shadow-md: 0 6px 16px rgba(44, 34, 24, 0.06), 0 2px 6px rgba(44, 34, 24, 0.04);
+  --shadow-lg: 0 16px 40px rgba(44, 34, 24, 0.07), 0 4px 12px rgba(44, 34, 24, 0.04);
+  --shadow-glow: 0 0 20px rgba(var(--accent-rgb), 0.12);
+
+  /* Gradients */
+  --gradient-card: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 97%, white 3%), var(--bg-panel));
+  --gradient-hero: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--bg-panel)), var(--bg-panel));
+  --gradient-button: linear-gradient(180deg, color-mix(in srgb, var(--button-primary-bg) 92%, white 8%), var(--button-primary-bg));
+  --gradient-surface: linear-gradient(180deg, var(--bg-surface-strong), var(--bg-surface));
+
+  /* Glassmorphism */
+  --glass-bg: rgba(var(--bg-panel-rgb), 0.72);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-blur: 16px;
+
+  /* Success */
+  --success: #22a566;
+  --success-soft: rgba(34, 165, 102, 0.12);
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-smooth: 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  --transition-spring: 320ms cubic-bezier(0.22, 1, 0.36, 1);
+
   --space-1: clamp(0.22rem, 0.2rem + 0.08vw, 0.28rem);
   --space-2: clamp(0.45rem, 0.4rem + 0.12vw, 0.55rem);
   --space-3: clamp(0.68rem, 0.6rem + 0.18vw, 0.82rem);
@@ -69,10 +104,12 @@
 
 html[data-theme="dark"] {
   --bg-canvas: #111111;
+  --bg-canvas-rgb: 17, 17, 17;
   --bg-page-radial: rgba(17, 17, 17, 0);
   --bg-page-start: #111111;
   --bg-page-end: #111111;
   --bg-panel: #1a1a1a;
+  --bg-panel-rgb: 26, 26, 26;
   --bg-panel-strong: #1f1f1f;
   --bg-ink: #000000;
   --bg-subtle: #171717;
@@ -91,8 +128,8 @@ html[data-theme="dark"] {
   --bg-sidebar-callout: #141414;
   --line-soft: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.14);
-  --accent-line: rgba(121, 103, 242, 0.38);
-  --accent-ring: rgba(121, 103, 242, 0.16);
+  --accent-line: rgba(161, 161, 170, 0.38);
+  --accent-ring: rgba(161, 161, 170, 0.16);
   --sidebar-line: rgba(255, 255, 255, 0.08);
   --sidebar-line-strong: rgba(255, 255, 255, 0.12);
   --text-strong: #ececec;
@@ -102,15 +139,108 @@ html[data-theme="dark"] {
   --text-sidebar-muted: rgba(243, 243, 244, 0.82);
   --text-sidebar-subtle: rgba(243, 243, 244, 0.64);
   --text-sidebar-faint: rgba(243, 243, 244, 0.46);
-  --accent: #8a7bff;
-  --accent-soft: rgba(138, 123, 255, 0.14);
+  --accent: #a1a1aa;
+  --accent-rgb: 161, 161, 170;
+  --accent-soft: rgba(161, 161, 170, 0.14);
   --warning: #efb15c;
   --warning-soft: rgba(239, 177, 92, 0.16);
   --danger: #f08b7d;
   --danger-soft: rgba(240, 139, 125, 0.16);
-  --highlight-bg: rgba(138, 123, 255, 0.22);
+  --highlight-bg: rgba(161, 161, 170, 0.22);
   --button-primary-bg: #f5f5f5;
   --button-primary-text: #111111;
   --button-secondary-text: #ececec;
   --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.14);
+  --shadow-glow: 0 0 24px rgba(var(--accent-rgb), 0.18);
+  --gradient-card: linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 96%, white 4%), var(--bg-panel));
+  --gradient-hero: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--bg-panel)), var(--bg-panel));
+  --gradient-button: linear-gradient(180deg, color-mix(in srgb, var(--button-primary-bg) 88%, white 12%), var(--button-primary-bg));
+  --gradient-surface: linear-gradient(180deg, var(--bg-surface-strong), var(--bg-surface));
+  --glass-bg: rgba(var(--bg-panel-rgb), 0.68);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.14);
+}
+
+/* Appearance Settings Overrides */
+
+:root[data-chat-font-size="small"] {
+  --font-root-size: clamp(13px, 0.22vw + 10.8px, 15px);
+  --font-scale-factor: 0.95;
+}
+:root[data-chat-font-size="large"] {
+  --font-root-size: clamp(18px, 0.28vw + 15.8px, 21px);
+  --font-scale-factor: 1.12;
+}
+
+/* Light Mode Accents */
+:root[data-theme-accent="purple"] {
+  --accent: #6366f1;
+  --accent-rgb: 99, 102, 241;
+  --accent-line: rgba(99, 102, 241, 0.32);
+  --accent-ring: rgba(99, 102, 241, 0.14);
+  --accent-soft: rgba(99, 102, 241, 0.1);
+  --highlight-bg: rgba(99, 102, 241, 0.18);
+}
+:root[data-theme-accent="green"] {
+  --accent: #22c55e;
+  --accent-rgb: 34, 197, 94;
+  --accent-line: rgba(34, 197, 94, 0.32);
+  --accent-ring: rgba(34, 197, 94, 0.14);
+  --accent-soft: rgba(34, 197, 94, 0.1);
+  --highlight-bg: rgba(34, 197, 94, 0.18);
+}
+:root[data-theme-accent="blue"] {
+  --accent: #3b82f6;
+  --accent-rgb: 59, 130, 246;
+  --accent-line: rgba(59, 130, 246, 0.32);
+  --accent-ring: rgba(59, 130, 246, 0.14);
+  --accent-soft: rgba(59, 130, 246, 0.1);
+  --highlight-bg: rgba(59, 130, 246, 0.18);
+}
+:root[data-theme-accent="rose"] {
+  --accent: #f43f5e;
+  --accent-rgb: 244, 63, 94;
+  --accent-line: rgba(244, 63, 94, 0.32);
+  --accent-ring: rgba(244, 63, 94, 0.14);
+  --accent-soft: rgba(244, 63, 94, 0.1);
+  --highlight-bg: rgba(244, 63, 94, 0.18);
+}
+
+/* Dark Mode Accents */
+[data-theme="dark"][data-theme-accent="purple"] {
+  --accent: #8a7bff;
+  --accent-rgb: 138, 123, 255;
+  --accent-line: rgba(138, 123, 255, 0.38);
+  --accent-ring: rgba(138, 123, 255, 0.16);
+  --accent-soft: rgba(138, 123, 255, 0.14);
+  --highlight-bg: rgba(138, 123, 255, 0.22);
+}
+[data-theme="dark"][data-theme-accent="green"] {
+  --accent: #4ade80;
+  --accent-rgb: 74, 222, 128;
+  --accent-line: rgba(74, 222, 128, 0.38);
+  --accent-ring: rgba(74, 222, 128, 0.16);
+  --accent-soft: rgba(74, 222, 128, 0.14);
+  --highlight-bg: rgba(74, 222, 128, 0.22);
+}
+[data-theme="dark"][data-theme-accent="blue"] {
+  --accent: #60a5fa;
+  --accent-rgb: 96, 165, 250;
+  --accent-line: rgba(96, 165, 250, 0.38);
+  --accent-ring: rgba(96, 165, 250, 0.16);
+  --accent-soft: rgba(96, 165, 250, 0.14);
+  --highlight-bg: rgba(96, 165, 250, 0.22);
+}
+[data-theme="dark"][data-theme-accent="rose"] {
+  --accent: #fb7185;
+  --accent-rgb: 251, 113, 133;
+  --accent-line: rgba(251, 113, 133, 0.38);
+  --accent-ring: rgba(251, 113, 133, 0.16);
+  --accent-soft: rgba(251, 113, 133, 0.14);
+  --highlight-bg: rgba(251, 113, 133, 0.22);
 }

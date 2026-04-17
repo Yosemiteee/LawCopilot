@@ -1,10 +1,10 @@
-# LawCopilot Master Plan (Sellable V1)
+# LawCopilot Master Plan (Adaptive Assistant V1)
 
 ## 1) Product Scope
-LawCopilot: matter-first hukuk calisma asistani.
-- Matter/case workspace
+LawCopilot: yerel-oncelikli, kaynak dayanakli, uyarlanabilir genel amacli asistan.
+- Workspace + knowledge memory
 - Belge hafizasi ve kaynakli arama
-- Draft-first hukuk yardimcisi
+- Draft-first iletisim ve is akislari
 - Gorev, not, zaman cizelgesi ve etkinlik akislari
 - Coklu model secimi (local / cloud / hybrid)
 
@@ -18,10 +18,10 @@ LawCopilot: matter-first hukuk calisma asistani.
 - Runtime kullaniciya "OpenClaw" olarak sunulmaz; bundled internal runtime olarak ele alinir
 
 ## 3) MVP / V1 Core
-- Matter-first workbench UI
+- Assistant-first workbench UI
 - Backend API + PostgreSQL + pgvector hedefi
 - Ingestion jobs + parser/chunk/retrieval
-- RBAC + office/user/matter boundaries + audit
+- RBAC + office/user/workspace boundaries + audit
 - Model router (local / cloud / hybrid)
 
 ## 4) V1.5

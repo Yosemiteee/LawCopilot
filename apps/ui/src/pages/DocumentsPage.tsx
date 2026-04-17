@@ -99,7 +99,7 @@ export function DocumentsPage() {
 
   return (
     <div className="page-grid page-grid--split">
-      <SectionCard title="Çalışma alanı belgeleri" subtitle="Yalnız seçilen klasör ağacındaki belgeler listelenir ve analiz edilir.">
+      <SectionCard title="Çalışma alanı belgeleri" subtitle="Yalnız seçilen klasör ağacındaki belgeler listelenir ve analiz edilir." className="sticky-panel">
         <div className="stack">
           <div className="callout callout--accent">
             <strong>{settings.currentMatterId ? "Seçili dosya bağı açık" : "Henüz seçili dosya yok"}</strong>

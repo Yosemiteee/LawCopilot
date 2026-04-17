@@ -62,6 +62,25 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return False
 
 
+def _iter_workspace_files(root_path: Path):
+    for current_root, dirnames, filenames in os.walk(root_path, followlinks=False):
+        current_path = Path(current_root)
+        dirnames[:] = [name for name in sorted(dirnames) if not (current_path / name).is_symlink()]
+        for filename in sorted(filenames):
+            yield current_path / filename
+
+
+def _file_checksum(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def validate_workspace_root(raw_path: str, *, platform: str | None = None) -> Path:
     if not raw_path or not raw_path.strip():
         raise ValueError("Çalışma klasörü boş olamaz.")
@@ -130,8 +149,8 @@ def scan_workspace_tree(*, root_path: Path, office_id: str, workspace_root_id: i
     allowed = {ext.lower() for ext in (extensions or SUPPORTED_EXTENSIONS.keys())}
     items: list[dict[str, Any]] = []
     stats = {"files_seen": 0, "files_indexed": 0, "files_skipped": 0, "files_failed": 0}
-    for file_path in sorted(root_path.rglob("*")):
-        if not file_path.is_file() or file_path.is_symlink():
+    for file_path in _iter_workspace_files(root_path):
+        if file_path.is_symlink() or not file_path.is_file():
             continue
         try:
             resolved = file_path.resolve()
@@ -180,7 +199,7 @@ def scan_workspace_tree(*, root_path: Path, office_id: str, workspace_root_id: i
             indexed_status = "failed"
             error = str(exc)
             stats["files_failed"] += 1
-        checksum = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        checksum = _file_checksum(resolved)
         items.append(
             {
                 "relative_path": relative_path,

@@ -7,6 +7,10 @@ export type AppSettings = {
   token: string;
   deploymentMode: string;
   themeMode: "system" | "light" | "dark";
+  themeAccent: string;
+  chatFontSize: string;
+  chatWallpaper: string;
+  customWallpaper: string;
   selectedModelProfile: string;
   currentMatterId: number | null;
   currentMatterLabel: string;
@@ -22,17 +26,22 @@ export type AppSettings = {
 
 type AppContextValue = {
   settings: AppSettings;
+  desktopHydrated: boolean;
   setSettings: (patch: Partial<AppSettings>) => void;
   setCurrentMatter: (matterId: number | null, matterLabel: string) => void;
   setWorkspace: (patch: Partial<Pick<AppSettings, "workspaceConfigured" | "workspaceRootName" | "workspaceRootPath" | "workspaceRootHash" | "scanOnStartup">>) => void;
 };
 
 const defaultSettings: AppSettings = {
-  baseUrl: "http://127.0.0.1:8000",
+  baseUrl: "http://127.0.0.1:18731",
   token: "",
-  deploymentMode: "local-only",
+  deploymentMode: "local-first-hybrid",
   themeMode: "system",
-  selectedModelProfile: "hybrid",
+  themeAccent: "default",
+  chatFontSize: "medium",
+  chatWallpaper: "default",
+  customWallpaper: "",
+  selectedModelProfile: "cloud",
   currentMatterId: null,
   currentMatterLabel: "",
   officeId: "varsayilan-ofis",
@@ -57,10 +66,21 @@ function readStoredSettings(): AppSettings {
     const themeMode = parsed?.themeMode === "light" || parsed?.themeMode === "dark" || parsed?.themeMode === "system"
       ? parsed.themeMode
       : defaultSettings.themeMode;
+    const themeAccent = parsed?.themeAccent || defaultSettings.themeAccent;
+    const chatFontSize = parsed?.chatFontSize || defaultSettings.chatFontSize;
+    const chatWallpaper = parsed?.chatWallpaper || defaultSettings.chatWallpaper;
+    const customWallpaper = parsed?.customWallpaper || defaultSettings.customWallpaper;
     return {
       ...defaultSettings,
       ...parsed,
       themeMode,
+      themeAccent,
+      chatFontSize,
+      chatWallpaper,
+      customWallpaper,
+      // Sensitive desktop runtime values are session-scoped only.
+      token: defaultSettings.token,
+      workspaceRootPath: defaultSettings.workspaceRootPath,
       // Matter selection is route/session state, not durable workspace configuration.
       currentMatterId: null,
       currentMatterLabel: "",
@@ -72,9 +92,16 @@ function readStoredSettings(): AppSettings {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = useState<AppSettings>(readStoredSettings);
+  const [desktopHydrated, setDesktopHydrated] = useState<boolean>(() => !window.lawcopilotDesktop);
 
   useEffect(() => {
-    const { currentMatterId: _currentMatterId, currentMatterLabel: _currentMatterLabel, ...persisted } = settings;
+    const {
+      currentMatterId: _currentMatterId,
+      currentMatterLabel: _currentMatterLabel,
+      token: _token,
+      workspaceRootPath: _workspaceRootPath,
+      ...persisted
+    } = settings;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
   }, [settings]);
 
@@ -88,6 +115,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.dataset.theme = resolvedTheme;
       document.documentElement.dataset.themeMode = settings.themeMode;
       document.documentElement.style.colorScheme = resolvedTheme;
+      document.documentElement.setAttribute("data-theme-accent", settings.themeAccent || "default");
+      document.documentElement.setAttribute("data-chat-font-size", settings.chatFontSize || "medium");
+      document.documentElement.setAttribute("data-chat-wallpaper", settings.chatWallpaper || "default");
+      
+      if (settings.customWallpaper) {
+        document.documentElement.style.setProperty("--custom-wallpaper", `url(${settings.customWallpaper})`);
+      } else {
+        document.documentElement.style.removeProperty("--custom-wallpaper");
+      }
     }
 
     applyTheme();
@@ -95,12 +131,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mediaQuery?.removeEventListener?.("change", applyTheme);
     };
-  }, [settings.themeMode]);
+  }, [settings.themeMode, settings.themeAccent, settings.chatFontSize, settings.chatWallpaper, settings.customWallpaper]);
 
   useEffect(() => {
     let active = true;
     async function loadDesktopState() {
       if (!window.lawcopilotDesktop) {
+        setDesktopHydrated(true);
         return;
       }
       const [runtimeInfo, storedConfig, workspaceConfig] = await Promise.all([
@@ -119,6 +156,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         themeMode: (["system", "light", "dark"].includes(String((storedConfig as Record<string, unknown>)?.themeMode))
           ? String((storedConfig as Record<string, unknown>)?.themeMode)
           : prev.themeMode) as AppSettings["themeMode"],
+        themeAccent: String((storedConfig as Record<string, unknown>)?.themeAccent || prev.themeAccent),
+        chatFontSize: String((storedConfig as Record<string, unknown>)?.chatFontSize || prev.chatFontSize),
+        chatWallpaper: String((storedConfig as Record<string, unknown>)?.chatWallpaper || prev.chatWallpaper),
+        customWallpaper: String((storedConfig as Record<string, unknown>)?.customWallpaper || prev.customWallpaper),
         selectedModelProfile: String((runtimeInfo as Record<string, unknown>)?.default_model_profile || (storedConfig as Record<string, unknown>)?.selectedModelProfile || prev.selectedModelProfile),
         officeId: String((runtimeInfo as Record<string, unknown>)?.officeId || (storedConfig as Record<string, unknown>)?.officeId || prev.officeId),
         releaseChannel: String((runtimeInfo as Record<string, unknown>)?.releaseChannel || (storedConfig as Record<string, unknown>)?.releaseChannel || prev.releaseChannel),
@@ -131,8 +172,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? Boolean((workspaceConfig as Record<string, unknown>)?.scanOnStartup)
           : prev.scanOnStartup
       }));
+      setDesktopHydrated(true);
     }
-    loadDesktopState().catch(() => undefined);
+    loadDesktopState().catch(() => {
+      if (active) {
+        setDesktopHydrated(true);
+      }
+    });
     return () => {
       active = false;
     };
@@ -158,8 +204,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ settings, setSettings, setCurrentMatter, setWorkspace }),
-    [settings, setSettings, setCurrentMatter, setWorkspace]
+    () => ({ settings, desktopHydrated, setSettings, setCurrentMatter, setWorkspace }),
+    [settings, desktopHydrated, setSettings, setCurrentMatter, setWorkspace]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

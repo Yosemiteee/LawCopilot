@@ -6,12 +6,20 @@ import { guvenEtiketi, kaynakTipiEtiketi } from "../../lib/labels";
 import { EmptyState } from "../common/EmptyState";
 import { StatusBadge } from "../common/StatusBadge";
 
+function citationKey(citation: Citation) {
+  return `${citation.document_id}-${citation.chunk_id ?? citation.chunk_index ?? citation.index}`;
+}
+
 export function CitationList({
   citations,
   resolveTarget,
+  onSelectCitation,
+  selectedCitationKey,
 }: {
   citations: Citation[];
   resolveTarget?: (citation: Citation) => DocumentViewerTarget | null;
+  onSelectCitation?: (citation: Citation) => void;
+  selectedCitationKey?: string | null;
 }) {
   const navigate = useNavigate();
 
@@ -21,42 +29,57 @@ export function CitationList({
 
   return (
     <div className="list">
-      {citations.map((citation) => (
-        <article className="list-item" key={`${citation.document_id}-${citation.chunk_id ?? citation.chunk_index ?? citation.index}`}>
-          <div className="toolbar">
-            <h3 className="list-item__title">{citation.document_name}</h3>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              {citation.label ? <StatusBadge tone="accent">{citation.label}</StatusBadge> : null}
-              <StatusBadge tone={citation.confidence === "high" ? "accent" : citation.confidence === "medium" ? "warning" : "danger"}>
-                {guvenEtiketi(citation.confidence)}
-              </StatusBadge>
-              <StatusBadge>{kaynakTipiEtiketi(citation.source_type)}</StatusBadge>
+      {citations.map((citation) => {
+        const key = citationKey(citation);
+        const selected = selectedCitationKey === key;
+        return (
+          <article
+            className="list-item"
+            key={key}
+            style={selected ? { borderColor: "var(--accent-600)", boxShadow: "0 0 0 1px color-mix(in srgb, var(--accent-600) 30%, transparent)" } : undefined}
+          >
+            <div className="toolbar">
+              <h3 className="list-item__title">{citation.document_name}</h3>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {citation.label ? <StatusBadge tone="accent">{citation.label}</StatusBadge> : null}
+                <StatusBadge tone={citation.confidence === "high" ? "accent" : citation.confidence === "medium" ? "warning" : "danger"}>
+                  {guvenEtiketi(citation.confidence)}
+                </StatusBadge>
+                <StatusBadge>{kaynakTipiEtiketi(citation.source_type)}</StatusBadge>
+              </div>
             </div>
-          </div>
-          <p className="list-item__meta">
-            Parça #{(citation.chunk_index ?? 0) + 1}
-            {citation.line_anchor ? ` · ${citation.line_anchor}` : ""}
-            {citation.page ? ` · Sayfa ${citation.page}` : ""}
-          </p>
-          <p style={{ marginBottom: 0, lineHeight: 1.6 }}>{citation.excerpt}</p>
-          {resolveTarget ? (
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-              <button
-                className="button button--ghost"
-                onClick={() => {
-                  const target = resolveTarget(citation);
-                  if (target) {
-                    navigate(buildDocumentViewerPath(target));
-                  }
-                }}
-                type="button"
-              >
-                Belgedeki yeri aç
-              </button>
-            </div>
-          ) : null}
-        </article>
-      ))}
+            <p className="list-item__meta">
+              Parça #{(citation.chunk_index ?? 0) + 1}
+              {citation.line_anchor ? ` · ${citation.line_anchor}` : ""}
+              {citation.page ? ` · Sayfa ${citation.page}` : ""}
+            </p>
+            <p style={{ marginBottom: 0, lineHeight: 1.6 }}>{citation.excerpt}</p>
+            {(resolveTarget || onSelectCitation) ? (
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+                {onSelectCitation ? (
+                  <button className="button button--ghost" onClick={() => onSelectCitation(citation)} type="button">
+                    Önizle
+                  </button>
+                ) : null}
+                {resolveTarget ? (
+                  <button
+                    className="button button--ghost"
+                    onClick={() => {
+                      const target = resolveTarget(citation);
+                      if (target) {
+                        navigate(buildDocumentViewerPath(target));
+                      }
+                    }}
+                    type="button"
+                  >
+                    Belgedeki yeri aç
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }

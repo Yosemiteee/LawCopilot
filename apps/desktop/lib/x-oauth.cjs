@@ -3,7 +3,7 @@ const { waitForLoopbackCallback } = require("./oauth-loopback.cjs");
 
 let currentSession = null;
 
-const DEFAULT_X_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"];
+const DEFAULT_X_SCOPES = ["tweet.read", "tweet.write", "users.read", "dm.read", "dm.write", "offline.access"];
 
 function base64Url(value) {
   return Buffer.from(value)
@@ -44,7 +44,7 @@ function getXAuthStatus(config) {
     configured: Boolean(x.oauthConnected && x.accessToken),
     accountLabel: x.accountLabel || "",
     userId: x.userId || "",
-    scopes: Array.isArray(x.scopes) ? x.scopes : credentials.scopes,
+    scopes: x.oauthConnected && Array.isArray(x.scopes) && x.scopes.length ? x.scopes : credentials.scopes,
     clientReady: Boolean(credentials.clientId),
     redirectUri: credentials.redirectUri,
     authUrl: currentSession?.authUrl || "",
@@ -177,10 +177,53 @@ async function startXOAuth(config, openUrl) {
 
 function cancelXOAuth(config) {
   currentSession = null;
+  const x = config?.x || {};
   return {
-    ...getXAuthStatus(config),
+    ...getXAuthStatus({
+      ...config,
+      x: {
+        ...x,
+        enabled: false,
+        accountLabel: "",
+        userId: "",
+        scopes: [],
+        oauthConnected: false,
+        oauthLastError: "",
+        configuredAt: "",
+        lastValidatedAt: "",
+        validationStatus: "pending",
+        lastSyncAt: "",
+        accessToken: "",
+        refreshToken: "",
+        tokenType: "",
+        expiryDate: "",
+        clientId: "",
+        clientSecret: "",
+      },
+    }),
     authStatus: "iptal",
     message: "X oturum akışı iptal edildi.",
+    patch: {
+      x: {
+        enabled: false,
+        accountLabel: "",
+        userId: "",
+        scopes: [],
+        oauthConnected: false,
+        oauthLastError: "",
+        configuredAt: "",
+        lastValidatedAt: "",
+        validationStatus: "pending",
+        lastSyncAt: "",
+        accessToken: "",
+        refreshToken: "",
+        tokenType: "",
+        expiryDate: "",
+        clientId: "",
+        clientSecret: "",
+        redirectUri: String(x.redirectUri || ""),
+      },
+    },
   };
 }
 

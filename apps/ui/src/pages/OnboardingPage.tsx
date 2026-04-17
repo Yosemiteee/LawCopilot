@@ -86,6 +86,8 @@ export function OnboardingPage() {
 
   const workspaceReady = Boolean(settings.workspaceConfigured || onboarding?.workspace_ready || health?.workspace_configured);
   const providerReady = Boolean(onboarding?.provider_ready ?? health?.provider_configured);
+  const modelReady = Boolean(onboarding?.model_ready ?? health?.provider_model);
+  const setupComplete = Boolean(onboarding?.setup_complete ?? (workspaceReady && providerReady && modelReady));
   const assistantReady = Boolean(onboarding?.assistant_ready ?? assistantProfile?.assistant_name ?? assistantProfile?.soul_notes);
   const userReady = Boolean(onboarding?.user_ready ?? profile?.display_name ?? profile?.assistant_notes);
   const assistantSnapshot = [
@@ -110,7 +112,7 @@ export function OnboardingPage() {
   );
 
   return (
-    <div className="settings-surface">
+    <div className="settings-surface settings-surface--onboarding">
       <div className="toolbar settings-surface__header" style={{ padding: "0.5rem 0 1.5rem", borderBottom: "1px solid var(--line-soft)", marginBottom: "1rem" }}>
         <div>
           <h1 style={{ margin: 0, fontFamily: "var(--font-heading)", fontSize: "1.8rem" }}>{sozluk.onboarding.title}</h1>
@@ -127,7 +129,16 @@ export function OnboardingPage() {
           <div className="toolbar">
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               {checklist.map((item) => (
-                <StatusBadge key={item.id} tone={stepTone(item.complete)}>
+                <StatusBadge
+                  key={item.id}
+                  tone={
+                    item.complete
+                      ? "accent"
+                      : setupComplete && (item.id === "assistant" || item.id === "user")
+                        ? "neutral"
+                        : stepTone(item.complete)
+                  }
+                >
                   {item.title}
                 </StatusBadge>
               ))}
@@ -147,6 +158,14 @@ export function OnboardingPage() {
               {onboarding?.interview_intro || "Kurulum tamamlandığında asistan sizinle kim olduğunuzu ve nasıl bir asistan istediğinizi konuşarak profili doldurur."}
             </p>
           </div>
+          {setupComplete && !onboarding?.complete ? (
+            <div className="callout callout--accent">
+              <strong>Temel kurulum hazır</strong>
+              <p style={{ marginBottom: 0 }}>
+                Çalışma klasörü ve model bağlantısı tamamlandı. Bundan sonra asistan seni tanımak için sorularını sohbet içinde sürdürecek; bu ekran tekrar zorunlu olarak açılmayacak.
+              </p>
+            </div>
+          ) : null}
         </div>
       </SectionCard>
 
@@ -188,7 +207,7 @@ export function OnboardingPage() {
             ) : null}
           </div>
           <p style={{ margin: 0, color: "var(--text-muted)" }}>
-            Google hesabını bağladığınızda Gmail, Takvim ve Drive birlikte gelir. Sağlayıcı, Google ve Telegram bağlantıları aynı kurulum alanında tutulur.
+            Google hesabını bağladığınızda Gmail, Takvim, Drive ve YouTube oynatma listeleri birlikte gelir. Sağlayıcı, Google ve Telegram bağlantıları aynı kurulum alanında tutulur.
           </p>
           <IntegrationSetupPanel mode="simple" />
         </div>
@@ -207,7 +226,7 @@ export function OnboardingPage() {
           <div className="callout">
             <strong>Beklenen ilk asistan soruları</strong>
             <p style={{ marginBottom: 0 }}>
-              Asistan, "Ben kimim?", "Nasıl davranayım?" ve "Daha ciddi mi, daha şakacı mı olayım?" gibi sorularla kendi persona ayarlarını sizinle kurar.
+              Asistan, önce sana nasıl hitap edeceğini sorar. Ardından kendine hangi adı kullanacağını ve nasıl davranacağını birlikte netleştirirsiniz.
             </p>
           </div>
         </div>
@@ -226,7 +245,7 @@ export function OnboardingPage() {
           <div className="callout callout--accent">
             <strong>Kullanıcı profili nasıl oluşur?</strong>
             <p style={{ marginBottom: 0 }}>
-              Asistan sizi tanımak için isim, sevdiğiniz renk, tercih ettiğiniz ulaşım biçimi, iletişim tarzınız ve benzer kişisel bağlamları sohbet içinde sorar. Öğrendikçe bunlar ayarlardaki profil alanlarına yansır.
+              Asistan sizi tanımak için önce hitap biçimi, yanıt tarzı, çalışma alışkanlıkları ve önemli kişiler gibi bilgileri sohbet içinde sorar. Öğrendikçe bunlar profil ve bellek alanlarına yansır.
             </p>
           </div>
           {onboarding?.interview_topics?.length ? (
@@ -245,6 +264,7 @@ export function OnboardingPage() {
                     <StatusBadge>{question.target}</StatusBadge>
                   </div>
                   <p className="list-item__meta">{question.reason}</p>
+                  {question.help_text ? <p className="list-item__meta">{question.help_text}</p> : null}
                 </article>
               ))}
             </div>
@@ -259,7 +279,7 @@ export function OnboardingPage() {
             <button className="button" type="button" onClick={() => navigate("/assistant")}>
               Asistanla tanışmayı başlat
             </button>
-            <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=workspace&section=workspace-setup-card")}>
+            <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=kurulum&section=kurulum-karti")}>
               Ayarlara dön
             </button>
           </div>

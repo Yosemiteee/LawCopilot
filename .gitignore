@@ -12,7 +12,11 @@ apps/api/build/
 apps/api/dist/
 apps/ui/dist/
 apps/desktop/dist/
+apps/browser-worker/dist/
+apps/browser-worker/.bundled-browsers/
+apps/ui/tsconfig.tsbuildinfo
 *.spec
+.codex/
 
 # Runtime data
 artifacts/

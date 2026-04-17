@@ -11,6 +11,54 @@ import { EmptyState } from "../common/EmptyState";
 import { SectionCard } from "../common/SectionCard";
 import { StatusBadge } from "../common/StatusBadge";
 
+type IngestionProgress = {
+  stageLabel: string;
+  percent: number;
+  etaLabel: string;
+};
+
+function formatEta(seconds: number): string {
+  if (seconds <= 0) return "Bitiş bekleniyor";
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 2) return "~1 dk";
+  if (minutes < 60) return `~${minutes} dk`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `~${hours} sa ${remainder} dk` : `~${hours} sa`;
+}
+
+function ingestionProgress(job: IngestionJob): IngestionProgress {
+  const status = String(job.status || "").toLowerCase();
+  if (status === "indexed" || status === "completed" || status === "success") {
+    return { stageLabel: "İndeks tamamlandı", percent: 100, etaLabel: "Tamamlandı" };
+  }
+  if (status === "failed" || status === "error") {
+    return { stageLabel: "İşlem durdu", percent: 100, etaLabel: "Müdahale gerekli" };
+  }
+
+  const created = new Date(job.created_at).getTime();
+  const updated = new Date(job.updated_at).getTime();
+  const elapsedSeconds = Math.max(0, (Date.now() - created) / 1000);
+  const stalenessSeconds = Math.max(0, (Date.now() - updated) / 1000);
+
+  if (status === "pending" || status === "queued") {
+    const percent = Math.min(22, 8 + elapsedSeconds / 8);
+    return {
+      stageLabel: "Sırada",
+      percent,
+      etaLabel: formatEta(120 - Math.min(110, elapsedSeconds)),
+    };
+  }
+
+  const percent = Math.min(92, Math.max(30, 30 + elapsedSeconds / 2.5));
+  const eta = Math.max(20, 210 - elapsedSeconds - stalenessSeconds * 0.3);
+  return {
+    stageLabel: "Ayrıştırma ve indeksleme",
+    percent,
+    etaLabel: formatEta(eta),
+  };
+}
+
 export function DocumentsPanel({ matterId }: { matterId: number }) {
   const { settings } = useAppContext();
   const navigate = useNavigate();
@@ -21,38 +69,52 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  async function loadPanelData(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
+    try {
+      const [documentsResponse, jobsResponse, workspaceResponse] = await Promise.all([
+        listMatterDocuments(settings, matterId),
+        listMatterIngestionJobs(settings, matterId),
+        listMatterWorkspaceDocuments(settings, matterId)
+      ]);
+      setDocuments(documentsResponse.items);
+      setJobs(jobsResponse.items);
+      setWorkspaceLinks(workspaceResponse.items);
+      setError("");
+      return jobsResponse.items;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Belge paneli yüklenemedi.");
+      return [] as IngestionJob[];
+    } finally {
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
+    }
+  }
+
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
-    Promise.all([
-      listMatterDocuments(settings, matterId),
-      listMatterIngestionJobs(settings, matterId),
-      listMatterWorkspaceDocuments(settings, matterId)
-    ])
-      .then(([documentsResponse, jobsResponse, workspaceResponse]) => {
-        if (!active) {
-          return;
-        }
-        setDocuments(documentsResponse.items);
-        setJobs(jobsResponse.items);
-        setWorkspaceLinks(workspaceResponse.items);
-        setError("");
-      })
-      .catch((err: Error) => {
-        if (!active) {
-          return;
-        }
-        setError(err.message);
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false);
-        }
+    loadPanelData().catch(() => undefined);
+
+    const timer = window.setInterval(async () => {
+      if (!active) return;
+      const activeJobs = jobs.some((item) => {
+        const status = String(item.status || "").toLowerCase();
+        return status !== "indexed" && status !== "completed" && status !== "success" && status !== "failed" && status !== "error";
       });
+      if (!activeJobs && !isSubmitting) {
+        return;
+      }
+      await loadPanelData({ silent: true });
+    }, 5000);
+
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
-  }, [settings.baseUrl, settings.token, matterId]);
+  }, [settings.baseUrl, settings.token, matterId, isSubmitting, jobs]);
 
   async function handleUpload(formData: FormData) {
     const file = formData.get("file");
@@ -76,6 +138,9 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
       setIsSubmitting(false);
     }
   }
+
+  const latestJob = jobs[0];
+  const latestProgress = latestJob ? ingestionProgress(latestJob) : null;
 
   return (
     <div className="stack">
@@ -112,6 +177,40 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
             </button>
           </div>
         </form>
+        {latestProgress ? (
+          <div className="callout" style={{ marginTop: "1rem" }}>
+            <div className="toolbar" style={{ marginBottom: "0.45rem" }}>
+              <strong>İçe aktarma durumu: {latestProgress.stageLabel}</strong>
+              <StatusBadge tone={latestJob?.status === "failed" ? "danger" : latestJob?.status === "indexed" ? "accent" : "warning"}>
+                %{Math.round(latestProgress.percent)}
+              </StatusBadge>
+            </div>
+            <div
+              aria-label="Yükleme ilerleme çubuğu"
+              style={{
+                width: "100%",
+                height: "0.55rem",
+                borderRadius: "999px",
+                background: "rgba(15, 23, 42, 0.08)",
+                overflow: "hidden",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <div
+                style={{
+                  width: `${latestProgress.percent}%`,
+                  height: "100%",
+                  borderRadius: "999px",
+                  background: latestJob?.status === "failed" ? "var(--danger)" : "var(--accent)",
+                  transition: "width 220ms ease",
+                }}
+              />
+            </div>
+            <p className="list-item__meta" style={{ marginBottom: 0 }}>
+              Tahmini kalan süre: {latestProgress.etaLabel} · İş #{latestJob?.id}
+            </p>
+          </div>
+        ) : null}
         {error ? <p style={{ color: "var(--danger)", marginTop: "1rem" }}>{error}</p> : null}
       </SectionCard>
 
@@ -200,20 +299,42 @@ export function DocumentsPanel({ matterId }: { matterId: number }) {
       <SectionCard title="İçe aktarma işleri" subtitle="Belge ayrıştırma ve parçalama akışının operasyonel görünürlüğü.">
         {jobs.length ? (
           <div className="list">
-            {jobs.map((job) => (
-              <article className="list-item" key={job.id}>
-                <div className="toolbar">
-                  <h3 className="list-item__title">{job.document_name || `Belge #${job.document_id}`}</h3>
-                  <StatusBadge tone={job.status === "indexed" ? "accent" : job.status === "failed" ? "danger" : "warning"}>
-                    {belgeDurumuEtiketi(job.status)}
-                  </StatusBadge>
-                </div>
-                <p className="list-item__meta">
-                  İş #{job.id} · {new Date(job.updated_at).toLocaleString("tr-TR")}
-                  {job.error ? ` · Hata: ${job.error}` : ""}
-                </p>
-              </article>
-            ))}
+            {jobs.map((job) => {
+              const progress = ingestionProgress(job);
+              return (
+                <article className="list-item" key={job.id}>
+                  <div className="toolbar">
+                    <h3 className="list-item__title">{job.document_name || `Belge #${job.document_id}`}</h3>
+                    <StatusBadge tone={job.status === "indexed" ? "accent" : job.status === "failed" ? "danger" : "warning"}>
+                      {belgeDurumuEtiketi(job.status)}
+                    </StatusBadge>
+                  </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "0.4rem",
+                      borderRadius: "999px",
+                      background: "rgba(15, 23, 42, 0.08)",
+                      overflow: "hidden",
+                      marginBottom: "0.45rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${progress.percent}%`,
+                        height: "100%",
+                        borderRadius: "999px",
+                        background: job.status === "failed" ? "var(--danger)" : "var(--accent)",
+                      }}
+                    />
+                  </div>
+                  <p className="list-item__meta">
+                    İş #{job.id} · {progress.stageLabel} · Kalan: {progress.etaLabel} · {new Date(job.updated_at).toLocaleString("tr-TR")}
+                    {job.error ? ` · Hata: ${job.error}` : ""}
+                  </p>
+                </article>
+              );
+            })}
           </div>
         ) : (
           <EmptyState title="Henüz içe aktarma işi yok" description="İlk belge yüklendiğinde işler burada görünür." />

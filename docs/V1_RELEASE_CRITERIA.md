@@ -5,28 +5,28 @@ Status: Pilot release gate
 
 ## Product Readiness
 
-- Matter list and matter detail flows are usable
-- Matter documents can be ingested and searched
+- Assistant home, inbox, calendar and proactive surfaces are usable
+- Workspace and personal knowledge inputs can be ingested and searched
 - AI responses expose citations and support status
 - Draft workflows are reviewable and not auto-sent
-- Tasks are matter-aware
+- Tasks, reminders and follow-up suggestions are usable
 - Deployment mode is visible in UI
 
 ## Security Readiness
 
 - strong JWT secret required outside dev
-- bootstrap admin path configured
+- token bootstrap path is explicitly configured
 - session revoke verified
 - connector allowlist enforced
 - PII masking verified
 - audit chain enabled
-- matter/document access rules tested
+- workspace/document access rules tested
 - no customer-facing requirement to manually install OpenClaw
 
 ## Retrieval Readiness
 
 - ingestion jobs visible
-- retrieval is matter-scoped
+- retrieval is workspace- and context-aware
 - citation metadata includes excerpt and source anchor
 - low-support outputs are labeled
 - evaluation fixtures exist and run in CI/local check
@@ -44,7 +44,7 @@ Status: Pilot release gate
 ## Testing Readiness
 
 - backend API tests pass
-- matter workflow tests pass
+- assistant workflow tests pass
 - retrieval tests pass
 - UI smoke tests pass
 - install smoke path verified
@@ -63,5 +63,5 @@ Status: Pilot release gate
 - uncited answers presented as authoritative
 - auto-send enabled by default
 - customer docs still require raw OpenClaw operation
-- matter/document boundaries untested
+- workspace/document boundaries untested
 - packaging path absent or misleading

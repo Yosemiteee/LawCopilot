@@ -86,7 +86,7 @@ export function SocialMediaPage() {
         {error ? <p style={{ color: "var(--danger)" }}>{error}</p> : null}
       </SectionCard>
 
-      <SectionCard title="Sosyal medya paylaşımı ekle" subtitle="Dava ile ilgili paylaşımları kayıt altına alın.">
+      <SectionCard title="Sosyal medya paylaşımı ekle" subtitle="Dava ile ilgili paylaşımları kayıt altına alın." className="sticky-panel">
         <form
           className="field-grid"
           onSubmit={(event) => {

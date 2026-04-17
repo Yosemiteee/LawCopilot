@@ -84,13 +84,21 @@ Beklenen çıktılar:
 ```bash
 ./scripts/smoke_api.sh
 ./scripts/smoke_desktop.sh
+./scripts/pilot_diagnostics.sh
 ./scripts/release_check.sh
+```
+
+Uzun süreli pilot soak için:
+```bash
+LAWCOPILOT_PILOT_SOAK_DURATION_SECONDS=7200 ./scripts/pilot_soak.sh
 ```
 
 CI ve paket raporları:
 - Windows build sonunda `artifacts/windows-build-artifacts.json`
 - macOS build sonunda `artifacts/macos-build-artifacts.json`
 - yerel Linux paket doğrulamasında `artifacts/linux-build-artifacts.json`
+- pilot telemetry snapshot'ları `artifacts/pilot-diagnostics/`
+- soak örnekleri `artifacts/pilot-soak/`
 
 ## Geri alma
 - uygulamayı kapat
@@ -106,3 +114,4 @@ CI ve paket raporları:
 - benzerlik motoru yerel sinyal tabanlıdır
 - OpenAI hesabı için tarayıcı tabanlı Codex oturumu masaüstü arayüzünden başlatılabilir
 - Gmail ve Takvim bağlantıları masaüstü OAuth ile kurulur; ayrı e-posta veya sosyal medya modülü yerine Asistan ajandasına yansır
+- Windows ve macOS packaged lifecycle smoke Linux kadar otomatik doğrulanmış değildir; runbook için `docs/PILOT_OBSERVABILITY.md` bakılmalıdır

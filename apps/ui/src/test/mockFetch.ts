@@ -3,6 +3,9 @@ import { vi } from "vitest";
 type MockPayload = unknown | ((input: RequestInfo | URL, init?: RequestInit) => unknown);
 
 function responseFromPayload(payload: unknown, status = 200) {
+  if (payload instanceof Response) {
+    return payload;
+  }
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" }

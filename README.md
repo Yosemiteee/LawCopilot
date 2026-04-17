@@ -1,27 +1,29 @@
 # LawCopilot
 
-LawCopilot, avukatlar ve hukuk büroları için geliştirilen dosya odaklı, kaynak dayanaklı, insan denetimli hukuk çalışma masasıdır.
+LawCopilot, yerel-oncelikli, kaynak dayanakli, insan denetimli ve uyarlanabilir bir kisisel + is asistanidir.
 
 Bugünkü durum:
 - indirilebilir masaüstü kabuğu vardır
 - yerel backend gömülü ikili olarak paketlenebilir
 - kullanıcı bir çalışma klasörü seçer
 - uygulama yalnız bu klasör ve alt klasörlerine erişir
-- belge tarama, arama, benzer dosya bulma ve dosyaya bağlama yerelde çalışır
+- belge tarama, arama, benzer içerik bulma ve kaynak bağlama yerelde çalışır
 - günlük ajanda, önerilen aksiyonlar ve taslak + onay akışı aynı asistan yüzeyinde toplanır
 - Google Gmail, Google Takvim, Telegram ve Codex/OpenClaw hesap bağlantıları Ayarlar ekranından yönetilir
+- yeni `Integrations` yüzeyi platform-managed connector katalogu ve legacy baglanti envanterini birlikte gösterir
 - kullanıcıya görünen arayüz Türkçedir
 
 ## Ana özellikler
-- Dosya odaklı çalışma alanı
+- Çalışma alanı odaklı yerel hafıza
 - Çalışma klasörü kapsamlı yerel belge hafızası
 - Kaynak dayanaklı arama ve atıf görünümü
 - Tek tıkla belge görüntüleyici, alıntı atlama ve pasaj vurgulama
-- Dosya adı, içerik, belge türü, checksum ve klasör bağlamı ile açıklanabilir benzer dosya tespiti
-- Kronoloji, risk notu, görev önerisi ve taslak akışları
+- Dosya adı, içerik, belge türü, checksum ve klasör bağlamı ile açıklanabilir benzer içerik tespiti
+- Ajanda, görev, taslak ve takip akışları
 - Günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonlar
-- Gmail/Takvim/Telegram sinyallerini dosya ve görev verisiyle birleştiren asistan yüzeyi
-- Dikkat edilmesi gereken noktalar, eksik belge sinyalleri ve taslak önerileri
+- Gmail/Takvim/Telegram sinyallerini görev ve çalışma verisiyle birleştiren asistan yüzeyi
+- Integrations katalogu, connector lifecycle, sync ve action yönetimi
+- Dikkat edilmesi gereken noktalar, eksik bilgi sinyalleri ve taslak önerileri
 - Taslak öncelikli, insan onaylı kullanım modeli
 - Windows ve macOS paketleme hattı
 
@@ -65,7 +67,7 @@ npm run build
 `npm test` şunları birlikte çalıştırır:
 - Türkçe arayüz guard kontrolü
 - route ve onboarding testleri
-- matter detail ve temel workbench smoke testleri
+- temel assistant ve workbench smoke testleri
 
 ### Masaüstü smoke testi
 ```bash
@@ -105,6 +107,10 @@ Beklenen çıktı:
 - `apps/desktop/dist/LawCopilot-<surum>-windows-x64.exe`
 - `artifacts/windows-build-artifacts.json` veya CI içindeki Windows build manifesti
 
+GitHub indirilebilir sürüm:
+- Etiketli release'lerde Windows kurulum dosyası GitHub `Releases` sayfasına yüklenir.
+- İndirilebilir son kurulum için repo içindeki `Releases` bölümünü kullanın.
+
 ### macOS
 ```bash
 ./scripts/package_macos.sh
@@ -129,24 +135,28 @@ Not:
 - `POST /workspace/similar-documents`
 - `POST /matters/{matter_id}/documents/attach-from-workspace`
 - `GET /matters/{matter_id}/workspace-documents`
+- `GET /integrations/catalog`
+- `POST /integrations/connections`
+- `POST /integrations/connections/{id}/sync`
+- `POST /integrations/scaffold`
 
 ## Kısa ürün akışı
 1. Masaüstü uygulamayı aç
 2. Çalışma klasörü seç
 3. Klasörü tara
-4. Belgeleri listele, klasör bazlı arama yap ve benzer dosyaları bul
-5. Gmail, Takvim, Telegram ve Codex bağlantılarını Ayarlar ekranından doğrula
+4. Belgeleri listele, klasör bazlı arama yap ve benzer içerikleri bul
+5. Ayarlar ekranindan legacy OAuth baglantilarini, `Integrations` ekranindan ise yeni connector katalogunu yonet
 6. Asistan ekranında günün ajandasını ve önerilen aksiyonları incele
-7. Dikkat edilmesi gereken noktaları, eksik belge sinyallerini ve taslak önerilerini incele
-8. Gerekli belgeyi bir dosyaya bağla
-9. Arama sonucu, benzer dosya sonucu veya taslak bağlamından ilgili belgeye tek tıkla git
-10. Dosya içinde arama, kronoloji, risk notu, görev ve taslak akışlarını yürüt
+7. Dikkat edilmesi gereken noktaları, eksik bilgi sinyallerini ve taslak önerilerini incele
+8. Gerekli belgeleri veya notları çalışma bağlamına ekle
+9. Arama sonucu, benzer içerik sonucu veya taslak bağlamından ilgili belgeye tek tıkla git
+10. Görev, taslak, takip ve bilgi derleme akışlarını yürüt
 
-## Çalışma alanı ve dosya ilişkisi
+## Çalışma alanı ve bağlam ilişkisi
 - Çalışma alanı, seçilen klasör altındaki yerel belge havuzudur.
-- Dosya, seçilmiş bir hukuk işi için kürasyon, inceleme, risk notu ve taslak üretim yüzeyidir.
-- Bir çalışma alanı belgesi bir veya daha fazla dosyaya bağlanabilir.
-- Benzer dosya tespiti ve klasör bazlı arama önce çalışma alanında yapılır; dosya içi çalışma ise bağlı belgeler üzerinden derinleşir.
+- Legacy `matter/dosya` yüzeyleri hâlâ repoda vardır; bunlar proje veya iş bağlamı gibi düşünülebilir.
+- Bir çalışma alanı belgesi bir veya daha fazla bağlama bağlanabilir.
+- Benzer içerik tespiti ve klasör bazlı arama önce çalışma alanında yapılır; daha derin çalışma bağlı kayıtlar üzerinden devam eder.
 
 ## Kaynak dayanaklı inceleme akışı
 1. Çalışma Alanı veya Belgeler ekranında arama yapın.
@@ -161,18 +171,24 @@ Not:
 - İsterseniz Codex sağlayıcısını, Google Gmail/Takvim bağlantısını ve Telegram bot bağlantısını kaydedin.
 - Disk kökü, sistem klasörleri ve kullanıcı klasörünün tamamı güvenlik nedeniyle kabul edilmez.
 - İlk tarama bitince `Çalışma Alanı` ekranı açılır.
-- Günün işi, açık onay isteyen taslaklar ve bekleyen iletişimler `Asistan` ekranında görünür.
+- Günün öncelikleri, açık onay isteyen taslaklar ve bekleyen iletişimler `Asistan` ekranında görünür.
 
 ## Pilot sınırı
 - Başlangıç model profili masaüstü yapılandırmasına kaydedilir ve uygulama açılışında varsayılan yönlendirme politikası olarak kullanılır.
 - OpenAI hesabı için tarayıcı tabanlı Codex oturumu, OpenAI API, OpenAI uyumlu uç nokta ve yerel Ollama için masaüstü onboarding vardır; ayarlar yerel masaüstü yapılandırmasına kaydedilir.
 - Google Gmail ve Google Takvim için masaüstü OAuth onboarding vardır; bağlantı durumları Ayarlar ve Çekirdek ekranında görünür.
+- `Integrations` ekranı legacy masaustu baglantilarini katalogta gorunur kilarken yeni platform-managed connector'lar icin ortak lifecycle sunar.
 - Telegram bot tokeni ve izinli kullanıcı kimliği için masaüstü onboarding vardır; istenirse test mesajı atılabilir.
 - OpenAI hesabınız Google ile bağlıysa tarayıcıda açılan giriş ekranında Google seçeneğiyle devam edebilirsiniz. Codex oturumu seçilen modeli yerel masaüstü ayarına kaydeder.
 - Ayrı `E-posta Taslakları` ve `Sosyal Medya` ürün yüzeyi kaldırılmıştır; dış aksiyonlar `Asistan` ve `Taslaklar` ekranlarından yürür.
 
+## Not
+- Repo içinde hâlâ hukuk odaklı veya `matter/dosya` isimleri taşıyan legacy yüzeyler vardır.
+- Bu branch'teki yön artık daha genel amaçlı, uyarlanabilir bir asistana doğrudur; yeni değişiklikler assistant-first yaklaşımı izlemelidir.
+
 ## İlgili belgeler
 - [ARCHITECTURE.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/ARCHITECTURE.md)
+- [INTEGRATIONS_PLATFORM.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/INTEGRATIONS_PLATFORM.md)
 - [BOUNDARY_DECISIONS.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/BOUNDARY_DECISIONS.md)
 - [PILOT_INSTALL_GUIDE.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/PILOT_INSTALL_GUIDE.md)
 - [V1_RELEASE_CRITERIA.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/V1_RELEASE_CRITERIA.md)

@@ -1,0 +1,61 @@
+name: release-desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release etiketi (ornek: v0.7.0-pilot.2)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Release etiketi belirle
+        id: release_meta
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Windows paketi olustur
+        run: ./scripts/package_windows.sh
+
+      - name: Windows artefactlarini dogrula
+        run: node ./scripts/verify_packaged_artifacts.cjs windows ./apps/desktop/dist
+
+      - name: Windows artefact manifesti yaz
+        run: node ./scripts/write_artifact_manifest.cjs windows ./apps/desktop/dist ./artifacts/windows-build-artifacts.json
+
+      - name: GitHub release olustur ve exe yukle
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: LawCopilot ${{ steps.release_meta.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.release_meta.outputs.tag, 'pilot') }}
+          files: |
+            apps/desktop/dist/*.exe
+            artifacts/windows-build-artifacts.json

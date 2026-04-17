@@ -1,0 +1,16 @@
+{
+  "id": "demo-source-travel-pref",
+  "source_type": "user_preferences",
+  "title": "Seyahat tercihi",
+  "content": "Genelde trenle seyahat etmeyi seviyorum; kısa rotalarda uçak yerine tren öner.",
+  "metadata": {
+    "field": "travel_preferences"
+  },
+  "occurred_at": "2026-04-06T09:00:00Z",
+  "source_ref": "demo:conversation:travel-preference",
+  "tags": [
+    "travel",
+    "preferences"
+  ],
+  "stored_at": "2026-04-06T09:00:02Z"
+}

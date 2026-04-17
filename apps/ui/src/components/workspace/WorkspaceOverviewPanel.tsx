@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAppContext } from "../../app/AppContext";
-import { belgeDurumuEtiketi, dagitimKipiEtiketi } from "../../lib/labels";
+import { belgeDurumuEtiketi } from "../../lib/labels";
 import { getWorkspaceOverview, runWorkspaceScan, saveWorkspaceRoot } from "../../services/lawcopilotApi";
 import type { WorkspaceOverviewResponse } from "../../types/domain";
-import { EmptyState } from "../common/EmptyState";
 import { MetricCard } from "../common/MetricCard";
 import { SectionCard } from "../common/SectionCard";
 import { StatusBadge } from "../common/StatusBadge";
@@ -117,8 +116,8 @@ export function WorkspaceOverviewPanel() {
     <div className="page-grid page-grid--workspace workspace-overview">
       <div className="stack workspace-overview__main">
         <SectionCard
-          title={sozluk.workspace.title}
-          subtitle={sozluk.workspace.subtitle}
+          title={sozluk.settings.workspaceTitle}
+          subtitle={sozluk.settings.workspaceSubtitle}
           actions={
             <div className="workspace-overview__actions">
               {isDesktopApp ? (
@@ -142,9 +141,9 @@ export function WorkspaceOverviewPanel() {
               </div>
               <div className="workspace-overview__status-cluster">
                 <div className="workspace-overview__metric-grid">
-                  <MetricCard label={sozluk.workspace.modeLabel} value={dagitimKipiEtiketi(settings.deploymentMode)} />
                   <MetricCard label={sozluk.workspace.documentCountLabel} value={documentCount} />
                   <MetricCard label={sozluk.workspace.lastScanLabel} value={latestScanValue} />
+                  <MetricCard label={sozluk.workspace.scanJobCountLabel} value={overview?.scan_jobs.items.length ?? 0} />
                 </div>
                 {latestJob ? (
                   <div className="workspace-overview__badge-row">
@@ -230,7 +229,7 @@ export function WorkspaceOverviewPanel() {
                     {sozluk.workspace.choose}
                   </button>
                 ) : null}
-                <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=workspace&section=workspace-setup-card")}>
+                <button className="button button--secondary" type="button" onClick={() => navigate("/settings?tab=kurulum&section=kurulum-karti")}>
                   {sozluk.shell.setupBannerAction}
                 </button>
               </div>

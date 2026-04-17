@@ -1,25 +1,32 @@
 {
   "name": "lawcopilot-desktop",
   "private": true,
-  "version": "0.7.0-pilot.1",
+  "version": "0.7.0-pilot.2",
   "description": "Pilot desktop shell for LawCopilot",
   "author": "LawCopilot Team",
   "main": "main.cjs",
   "scripts": {
     "dev": "electron .",
+    "prepare:package": "node scripts/close-running-desktop.cjs",
+    "sync:ui": "node scripts/sync-ui-dist.cjs",
+    "update:runtime": "bash ../../scripts/update_desktop_runtime.sh",
+    "build:browser-worker": "node scripts/build-browser-worker.cjs",
     "test:runtime": "node scripts/desktop-smoke.cjs",
+    "test:whatsapp-runtime": "node scripts/whatsapp-runtime-smoke.cjs",
     "test:workspace": "node scripts/workspace-security-smoke.cjs",
     "test:integrations": "node scripts/integration-config-smoke.cjs",
     "test:codex-auth": "node scripts/codex-auth-smoke.cjs",
     "test:packaged": "node scripts/packaged-runtime-smoke.cjs",
-    "test": "npm run test:runtime && npm run test:workspace && npm run test:integrations && npm run test:codex-auth && npm run test:packaged",
+    "test:lifecycle": "node scripts/packaged-lifecycle-smoke.cjs",
+    "test:updater": "node scripts/updater-smoke.cjs",
+    "test": "npm run build:browser-worker && npm run test:runtime && npm run test:whatsapp-runtime && npm run test:workspace && npm run test:integrations && npm run test:codex-auth && npm run test:packaged && npm run test:updater",
     "build:backend": "node scripts/build-backend.cjs",
     "build:backend:windows": "node scripts/build-backend.cjs windows",
     "build:backend:macos": "node scripts/build-backend.cjs macos",
-    "package:dir": "npm run build:backend && electron-builder --dir",
-    "package:linux": "npm run build:backend && electron-builder --linux dir",
-    "package:windows": "npm run build:backend:windows && electron-builder --win nsis --x64",
-    "package:macos": "npm run build:backend:macos && electron-builder --mac dmg zip --universal",
+    "package:dir": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --dir",
+    "package:linux": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend && electron-builder --linux AppImage dir",
+    "package:windows": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:windows && electron-builder --win nsis --x64",
+    "package:macos": "npm run prepare:package && npm run build:browser-worker && npm --prefix ../browser-worker run install:chromium:bundled && npm run build:backend:macos && electron-builder --mac dmg zip --universal",
     "package": "npm run package:dir"
   },
   "devDependencies": {
@@ -33,10 +40,12 @@
       "output": "dist"
     },
     "files": [
+      "package.json",
       "main.cjs",
       "preload.cjs",
       "lib/**/*",
-      "scripts/**/*"
+      "scripts/**/*",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
@@ -52,10 +61,44 @@
         "filter": [
           "lawcopilot-api*"
         ]
+      },
+      {
+        "from": "../browser-worker/dist",
+        "to": "browser-worker/dist",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../browser-worker/node_modules/playwright",
+        "to": "browser-worker/node_modules/playwright",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../browser-worker/node_modules/playwright-core",
+        "to": "browser-worker/node_modules/playwright-core",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../browser-worker/.bundled-browsers",
+        "to": "browser-worker/.bundled-browsers",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "linux": {
       "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
         "dir"
       ],
       "category": "Office"
@@ -88,10 +131,24 @@
       ]
     },
     "artifactName": "LawCopilot-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.example.invalid/lawcopilot",
+        "channel": "latest",
+        "useMultipleRangeRequest": false
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "LawCopilot"
     }
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "electron-updater": "^6.6.2",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.34.6"
   }
 }

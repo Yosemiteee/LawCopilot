@@ -14,6 +14,7 @@ const DEFAULT_GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/youtube.readonly",
 ];
 
 function normalizeGoogleScopes(scopes) {

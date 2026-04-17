@@ -10,12 +10,12 @@ if [ -x ".venv/bin/python" ]; then
 fi
 
 "$PY_BIN" -m compileall -q lawcopilot_api
-LAWCOPILOT_BOOTSTRAP_ADMIN_KEY="" "$PY_BIN" -m pytest -q tests
+LAWCOPILOT_ENVIRONMENT=test LAWCOPILOT_ALLOW_LOCAL_TOKEN_BOOTSTRAP=true LAWCOPILOT_BOOTSTRAP_ADMIN_KEY="" "$PY_BIN" -m pytest -q tests
 
 cd "$ROOT/apps/ui"
 npm test
 npm run build
-test -f legacy-index.html
+test -f dist/index.html
 echo "UI shell validation: OK"
 
 cd "$ROOT/apps/desktop"

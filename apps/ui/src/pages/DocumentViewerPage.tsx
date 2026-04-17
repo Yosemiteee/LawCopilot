@@ -150,6 +150,8 @@ export function DocumentViewerPage() {
   const surroundingChunks = selectedChunkPosition >= 0
     ? chunks.slice(Math.max(0, selectedChunkPosition - 1), Math.min(chunks.length, selectedChunkPosition + 2))
     : [];
+  const canOpenInDesktopApp = Boolean(workspaceDocument?.relative_path && window.lawcopilotDesktop?.openPathInOS);
+  const canRevealInDesktopApp = Boolean(workspaceDocument?.relative_path && window.lawcopilotDesktop?.revealPathInOS);
 
   function selectChunk(position: number) {
     if (position < 0 || position >= chunks.length) {
@@ -219,10 +221,22 @@ export function DocumentViewerPage() {
           actions={
             scope === "workspace" ? (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="button button--secondary" onClick={openInSystem} type="button">
+                <button
+                  className="button button--secondary"
+                  disabled={!canOpenInDesktopApp}
+                  onClick={openInSystem}
+                  title={canOpenInDesktopApp ? "Belgeyi sistem uygulamasında aç" : "Bu kısayol yalnız masaüstü uygulamasında çalışır"}
+                  type="button"
+                >
                   Sistem uygulamasında aç
                 </button>
-                <button className="button button--ghost" onClick={revealInFolder} type="button">
+                <button
+                  className="button button--ghost"
+                  disabled={!canRevealInDesktopApp}
+                  onClick={revealInFolder}
+                  title={canRevealInDesktopApp ? "Belgenin klasörünü aç" : "Bu kısayol yalnız masaüstü uygulamasında çalışır"}
+                  type="button"
+                >
                   Klasörde göster
                 </button>
               </div>
@@ -252,6 +266,11 @@ export function DocumentViewerPage() {
               ) : null}
             </div>
           </div>
+          {scope === "workspace" && (!canOpenInDesktopApp || !canRevealInDesktopApp) ? (
+            <p className="list-item__meta" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
+              Sistem uygulaması kısayolları yalnız masaüstü runtime hazır olduğunda açılır.
+            </p>
+          ) : null}
           {systemError ? <p style={{ color: "var(--danger)", marginBottom: 0 }}>{systemError}</p> : null}
         </SectionCard>
 
@@ -311,7 +330,7 @@ export function DocumentViewerPage() {
         </SectionCard>
       </div>
 
-      <SectionCard className="document-viewer__aside-card" title="Parça gezgini" subtitle="Belgedeki normalleştirilmiş metin parçaları arasında doğrudan geçiş yapın.">
+      <SectionCard className="document-viewer__aside-card sticky-panel" title="Parça gezgini" subtitle="Belgedeki normalleştirilmiş metin parçaları arasında doğrudan geçiş yapın.">
         {chunks.length ? (
           <div className="list">
             {chunks.map((chunk, index) => {

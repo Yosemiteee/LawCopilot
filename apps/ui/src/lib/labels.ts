@@ -27,11 +27,13 @@ export function modelProfilEtiketi(value?: string | null) {
 export function saglayiciTuruEtiketi(value?: string | null) {
   switch ((value || "").toLowerCase()) {
     case "openai-codex":
-      return "OpenAI hesabı (Codex)";
+      return "OpenAI hesabı (Codex OAuth)";
     case "openai":
-      return "OpenAI API";
+      return "OpenAI API anahtarı";
+    case "gemini":
+      return "Google Gemini API anahtarı";
     case "openai-compatible":
-      return "OpenAI uyumlu sağlayıcı";
+      return "Özel OpenAI-uyumlu API";
     case "ollama":
       return "Yerel Ollama";
     default:
@@ -494,6 +496,8 @@ export function kaynakTipiEtiketi(value?: string | null) {
 
 export function taslakTipiEtiketi(value?: string | null) {
   switch ((value || "").toLowerCase()) {
+    case "petition":
+      return "Dilekçe taslağı";
     case "client_update":
       return "Müvekkil durum güncellemesi";
     case "internal_summary":
@@ -544,6 +548,10 @@ export function ajandaTipiEtiketi(value?: string | null) {
       return "Bugün";
     case "reply_needed":
       return "Yanıt bekliyor";
+    case "social_alert":
+      return "Sosyal risk uyarısı";
+    case "social_watch":
+      return "Sosyal izleme";
     case "calendar_prep":
       return "Takvim hazırlığı";
     case "personal_date":
@@ -596,6 +604,9 @@ export function asistanAksiyonDurumuEtiketi(value?: string | null) {
 export function disIletisimDurumuEtiketi(approvalStatus?: string | null, deliveryStatus?: string | null) {
   if ((deliveryStatus || "").toLowerCase() === "sent") {
     return "Gönderildi";
+  }
+  if ((deliveryStatus || "").toLowerCase() === "payment_pending") {
+    return "Ödeme bekleniyor";
   }
   if ((deliveryStatus || "").toLowerCase() === "failed") {
     return "Gönderim hatası";

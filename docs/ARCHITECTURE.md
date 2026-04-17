@@ -49,18 +49,37 @@ Sorumluluklar:
 
 ## Entegrasyon ve ajanda modeli
 
-LawCopilot VNext ürün yönünde entegrasyonlar ayrı ürün modülü değil, `Ayarlar` ekranının parçasıdır.
+LawCopilot entegrasyonları iki katmanda yonetir:
+- `Ayarlar`: mevcut masaustu onboarding ve OAuth akislari
+- `Integrations`: generic connector katalogu, platform-managed baglantilar ve legacy status envanteri
 
-Bağlı kaynaklar:
+Platform katmanlari:
+- connector DSL: typed spec, auth metadata, resources, actions, triggers, sync policy
+- runtime engine: preview, save, validate, sync, action execution, disconnect
+- persistence: `integration_connections`, `integration_sync_runs`, `integration_records`, `integration_action_runs`
+- security: sealed secret blob, scope/access model, human review gate, domain validation
+
+Legacy baglantilar:
 - Codex/OpenClaw hesap bağlantısı
 - Google Gmail
 - Google Takvim
+- Google Drive
+- Outlook Mail / Takvim
 - Telegram
+- WhatsApp
+- X
+- LinkedIn
+
+Platform-managed ornek connectorlar:
+- Notion
+- Generic REST API
+- PostgreSQL
+- Elastic
 
 Ürün yüzeyi:
 - `Asistan` günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonları gösterir
 - `Taslaklar` kanal bağımsız dış iletişim ve çalışma çıktısı merkezidir
-- ayrı `E-posta Taslakları` ve `Sosyal Medya` ana navigasyondan kaldırılmıştır
+- `Integrations` yeni connector lifecycle, sync durumu ve scaffold generator yüzeyidir
 
 Yerel mirror tabloları:
 - `connected_accounts`
@@ -69,18 +88,23 @@ Yerel mirror tabloları:
 - `assistant_actions`
 - `outbound_drafts`
 - `approval_events`
+- `integration_connections`
+- `integration_sync_runs`
+- `integration_records`
+- `integration_action_runs`
 
 Karar akışı:
 1. çalışma alanı ve dosya verisi
 2. görev, risk notu ve taslaklar
-3. Gmail thread mirror
-4. Google Takvim mirror
-5. Telegram sinyalleri
+3. legacy mirror kaynakları
+4. platform-managed connector sync kayıtları
+5. ajanda ve önerilen aksiyon üretimi
 6. Codex/OpenClaw runtime ile özetleme ve aksiyon önerisi
 
 Güvenlik kuralı:
 - tüm dış iletişimler `taslak + onay` akışıyla yürür
 - gönderim, kullanıcı onayı olmadan otomatikleşmez
+- connector yazma/silme aksiyonları açık onay ister
 
 ## Çalışma alanı modeli
 

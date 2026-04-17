@@ -7,12 +7,20 @@ import { AppRouter } from "./app/Router";
 import "./styles/tokens.css";
 import "./styles/globals.css";
 
+const app = (
+  <HashRouter>
+    <AppProvider>
+      <AppRouter />
+    </AppProvider>
+  </HashRouter>
+);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <HashRouter>
-      <AppProvider>
-        <AppRouter />
-      </AppProvider>
-    </HashRouter>
-  </React.StrictMode>
+  import.meta.env.DEV ? (
+    <React.StrictMode>
+      {app}
+    </React.StrictMode>
+  ) : (
+    app
+  )
 );

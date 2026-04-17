@@ -16,6 +16,23 @@ function ThemeProbe() {
   );
 }
 
+function SensitiveSettingsProbe() {
+  const { settings, setSettings } = useAppContext();
+
+  return (
+    <div>
+      <span data-testid="token">{settings.token || "empty"}</span>
+      <span data-testid="workspace-root-path">{settings.workspaceRootPath || "empty"}</span>
+      <button
+        type="button"
+        onClick={() => setSettings({ token: "session-secret", workspaceRootPath: "/secret/workspace" })}
+      >
+        hassas
+      </button>
+    </div>
+  );
+}
+
 function mockMatchMedia(matches = false) {
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
   const mediaQuery = {
@@ -81,6 +98,33 @@ describe("AppProvider theme mode", () => {
       expect(document.documentElement.dataset.themeMode).toBe("dark");
       expect(document.documentElement.dataset.theme).toBe("dark");
       expect(document.documentElement.style.colorScheme).toBe("dark");
+    });
+  });
+
+  it("does not rehydrate or persist sensitive runtime fields", async () => {
+    mockMatchMedia(false);
+    window.localStorage.setItem(
+      "lawcopilot.ui.settings",
+      JSON.stringify({ token: "persisted-secret", workspaceRootPath: "/persisted/workspace" }),
+    );
+
+    render(
+      <AppProvider>
+        <SensitiveSettingsProbe />
+      </AppProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("token")).toHaveTextContent("empty");
+      expect(screen.getByTestId("workspace-root-path")).toHaveTextContent("empty");
+    });
+
+    screen.getByRole("button", { name: "hassas" }).click();
+
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem("lawcopilot.ui.settings") || "{}");
+      expect(stored.token).toBeUndefined();
+      expect(stored.workspaceRootPath).toBeUndefined();
     });
   });
 });

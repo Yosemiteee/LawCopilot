@@ -244,7 +244,7 @@ export function EmailDraftsPage() {
         ) : null}
       </div>
 
-      <SectionCard title="Yeni e-posta taslağı" subtitle="Taslak oluştur ve onay gönder.">
+      <SectionCard title="Yeni e-posta taslağı" subtitle="Taslak oluştur ve onay gönder." className="sticky-panel">
         <form
           className="field-grid"
           onSubmit={(event) => {

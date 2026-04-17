@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from ..agent_bridges.openclaw_runtime import create_openclaw_runtime
 from .base import LLMGenerationResult
@@ -40,6 +40,14 @@ class LLMService:
             return "advanced-openclaw"
         return "fallback-only"
 
+    @property
+    def vision_enabled(self) -> bool:
+        return bool(self.direct_enabled and getattr(self.direct_provider, "supports_vision", False))
+
+    @property
+    def audio_enabled(self) -> bool:
+        return bool(self.direct_enabled and getattr(self.direct_provider, "supports_audio", False))
+
     def complete(self, prompt: str, events=None, *, task: str, **meta) -> dict[str, Any] | None:
         result: LLMGenerationResult
         if self.direct_enabled:
@@ -69,6 +77,78 @@ class LLMService:
                 }
             if events:
                 events.log("openclaw_runtime_fallback", level="warning", task=task, error=result.error, **meta)
+        return None
+
+    def stream_complete(self, prompt: str, events=None, *, task: str, **meta) -> tuple[Iterator[str] | None, dict[str, Any] | None]:
+        if self.direct_enabled:
+            try:
+                stream = self.direct_provider.stream(prompt)
+            except Exception as exc:
+                if events:
+                    events.log("direct_provider_stream_fallback", level="warning", task=task, error=str(exc), **meta)
+                return None, None
+            if events:
+                events.log(
+                    "direct_provider_runtime_stream_used",
+                    task=task,
+                    provider=self.direct_provider.provider_type,
+                    model=self.direct_provider.model,
+                    **meta,
+                )
+            return stream, {
+                "provider": self.direct_provider.provider_type,
+                "model": self.direct_provider.model,
+                "runtime_mode": "direct-provider",
+            }
+        return None, None
+
+    def analyze_image(self, *, content: bytes, mime_type: str, prompt: str, events=None, task: str, **meta) -> dict[str, Any] | None:
+        if not self.vision_enabled:
+            return None
+        result = self.direct_provider.analyze_image(content=content, mime_type=mime_type, prompt=prompt)
+        if result.ok and result.text:
+            if events:
+                events.log("direct_provider_vision_used", task=task, provider=result.provider, model=result.model, **meta)
+            return {
+                "text": result.text,
+                "provider": result.provider,
+                "model": result.model,
+                "runtime_mode": "direct-provider-vision",
+            }
+        if events:
+            events.log("direct_provider_vision_fallback", level="warning", task=task, error=result.error, **meta)
+        return None
+
+    def analyze_audio(
+        self,
+        *,
+        content: bytes,
+        mime_type: str,
+        prompt: str,
+        filename: str,
+        events=None,
+        task: str,
+        **meta,
+    ) -> dict[str, Any] | None:
+        if not self.audio_enabled:
+            return None
+        result = self.direct_provider.analyze_audio(
+            content=content,
+            mime_type=mime_type,
+            prompt=prompt,
+            filename=filename,
+        )
+        if result.ok and result.text:
+            if events:
+                events.log("direct_provider_audio_used", task=task, provider=result.provider, model=result.model, **meta)
+            return {
+                "text": result.text,
+                "provider": result.provider,
+                "model": result.model,
+                "runtime_mode": "direct-provider-audio",
+            }
+        if events:
+            events.log("direct_provider_audio_fallback", level="warning", task=task, error=result.error, **meta)
         return None
 
 

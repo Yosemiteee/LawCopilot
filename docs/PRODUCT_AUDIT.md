@@ -13,27 +13,25 @@ What is real today:
 - Local persistence exists and is exercised by tests.
 - Retrieval exists, but is still prototype-grade and in-memory by default.
 - Security posture is materially better than a typical demo: bearer auth, role checks, session revoke, connector allowlist, PII masking, audit chain, ingest size guard.
-- A substantial UI prototype exists in `apps/ui/index.html`.
+- A substantial React + Vite UI and Electron desktop shell exist in the repository.
 
 What is not yet true:
-- There is no real desktop shell in the repository.
-- There is no pilot-ready installer or packaged desktop application.
 - Retrieval is not yet production-grade semantic search.
-- The product is not yet matter-first in its data model.
+- The product is not yet a fully coherent assistant-first data model.
 - OpenClaw is still visible as an external dependency in scripts and docs.
 
 ## Classification by Area
 
 | Area | Path | Status | Notes |
 | --- | --- | --- | --- |
-| API app | `apps/api/lawcopilot_api/app.py` | Working | Real endpoints for auth, query, tasks, drafts, social ingest. Not matter-first yet. |
+| API app | `apps/api/lawcopilot_api/app.py` | Working | Real endpoints for auth, query, tasks, drafts, assistant and workspace flows. |
 | Auth/RBAC | `apps/api/lawcopilot_api/auth.py` | Production candidate | HMAC bearer tokens, role hierarchy, expiry validation, session binding. |
-| Persistence | `apps/api/lawcopilot_api/persistence.py` | Partial | Works for current prototype tables. Needs matter-first schema and PostgreSQL path. |
+| Persistence | `apps/api/lawcopilot_api/persistence.py` | Partial | Works for current prototype tables. Needs assistant-first cleanup and PostgreSQL path. |
 | Retrieval | `apps/api/lawcopilot_api/rag.py` | Scaffold/partial | In-memory token-set retrieval. Pgvector path is transition metadata only. |
 | Connector safety | `apps/api/lawcopilot_api/connectors/safety.py` | Production candidate | Allowlist, dry-run, PII masking are real and useful. |
 | Backend tests | `apps/api/tests` | Working | Useful baseline, but coverage is prototype-centric. |
-| UI prototype | `apps/ui/index.html` | Working but monolithic | Feature-rich prototype, not maintainable as a product surface. |
-| Desktop shell | `apps/desktop` | Missing | Referenced in docs but does not exist. |
+| UI shell | `apps/ui` | Working | React + Vite shell exists, but the product surface is still broad and uneven. |
+| Desktop shell | `apps/desktop` | Working | Electron shell exists and packages, but hardening and posture work remain. |
 | Installer/bootstrap | `deployment/installer/*`, `scripts/bootstrap_openclaw.sh` | Partial/misleading | Hardened download logic exists, but still assumes user-visible OpenClaw dependency. |
 | Release checks | `scripts/release_check.sh` | Partial | Useful sanity script, but still tied to external OpenClaw assumptions. |
 | Product docs | `README.md`, `docs/*` | Mixed | Strong intent, but several claims are ahead of current code. |
@@ -63,14 +61,14 @@ Result:
 
 ### 3. Retrieval is not sellable yet
 
-The current retrieval layer is enough for demos and developer tests, but not for legal trust:
+The current retrieval layer is enough for demos and developer tests, but not for a trustworthy general assistant:
 - no persistent vector backend in active use
-- no matter-scoped retrieval model
+- retrieval scope is still fragmented across legacy surfaces
 - no ingestion job lifecycle
 - limited metadata
 - limited citation fidelity
 
-### 4. The data model is not matter-first
+### 4. The data model is not assistant-first
 
 Current tables center on:
 - sessions
@@ -79,13 +77,13 @@ Current tables center on:
 - social events
 - query jobs
 
-This is useful groundwork, but it is not the right core for a legal workbench. The product needs matters as the first-class organizing entity.
+This is useful groundwork, but it is not yet the right core for a broad assistant. The product needs a clearer assistant-first center around workspace, memory, tools, approvals and user context.
 
 ### 5. Documentation overstates some capabilities
 
 Confirmed mismatches:
-- `README.md` references `apps/desktop`, but that directory does not exist.
-- `MASTER_PLAN.md` and related docs imply product packaging that is not yet present in code.
+- Some docs still describe the product as lawyer-first, while the codebase already contains broader assistant surfaces.
+- `MASTER_PLAN.md` and related docs still over-index on matter-first/legal framing.
 - `PGVECTOR_TRANSITION_PLAN.md` is a valid plan, but not evidence that pgvector is already active.
 - release assets exist, but they do not amount to a pilot-ready release process yet.
 
@@ -102,14 +100,14 @@ This is a positive finding. Security controls are already more mature than the p
 ## Customer-Facing Reality Check
 
 Today, LawCopilot can credibly be shown as:
-- a sophisticated legal workbench prototype
-- a functional local API plus UI proof-of-concept
+- a functional local-first assistant prototype
+- a working desktop + API + UI stack
 - a strong foundation for a pilot product
 
 Today, LawCopilot cannot credibly be sold as:
 - a turnkey desktop application
-- a fully packaged law-firm product
-- a robust semantic legal memory system
+- a fully polished adaptive assistant
+- a robust semantic memory system
 - a multi-user office deployment product
 
 ## What Must Change Before Pilot
@@ -117,9 +115,9 @@ Today, LawCopilot cannot credibly be sold as:
 P0:
 - clarify product/runtime boundary
 - lock V1 scope
-- add matter-first domain model
+- add assistant-first domain model
 - modularize the UI
-- redesign retrieval for matter-scoped citations
+- redesign retrieval for assistant-grade citations and memory ranking
 
 P1:
 - add pilot-ready packaging path
@@ -134,7 +132,7 @@ LawCopilot is not a fake demo. It contains real product-quality instincts and me
 The primary problem is not lack of ambition. The primary problem is that the architecture still reflects prototype speed rather than product boundaries.
 
 The correct next move is not more demo polish. The correct next move is:
-- matter-first foundation
+- assistant-first foundation
 - modular UI shell
 - retrieval redesign
 - product/runtime boundary cleanup

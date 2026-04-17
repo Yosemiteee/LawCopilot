@@ -14,12 +14,10 @@ export function renderApp(initialEntries: string[], options: RenderOptions = {})
   if (options.storedSettings) {
     window.localStorage.setItem("lawcopilot.ui.settings", JSON.stringify(options.storedSettings));
   }
-  if (options.desktop) {
-    Object.defineProperty(window, "lawcopilotDesktop", {
-      configurable: true,
-      value: options.desktop,
-    });
-  }
+  Object.defineProperty(window, "lawcopilotDesktop", {
+    configurable: true,
+    value: options.desktop,
+  });
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <AppProvider>

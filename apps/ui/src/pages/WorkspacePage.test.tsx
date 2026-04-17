@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { installFetchMock } from "../test/mockFetch";
@@ -28,6 +28,10 @@ const healthPayload = {
   calendar_connected: true,
   telegram_configured: true,
   telegram_bot_username: "lawcopilot_bot",
+  whatsapp_configured: true,
+  whatsapp_account_label: "+90 555 111 22 33",
+  x_configured: true,
+  x_account_label: "@lawcopilot",
 };
 
 const workspacePayload = {
@@ -62,7 +66,7 @@ const workspacePayload = {
 };
 
 describe("WorkspacePage", () => {
-  it("renders workspace tool drawer content inside assistant shell", async () => {
+  it("renders standalone workspace page instead of assistant drawer", async () => {
     installFetchMock({
       "GET /health": healthPayload,
       "GET /assistant/home": {
@@ -97,16 +101,41 @@ describe("WorkspacePage", () => {
         items: [],
         generated_from: "assistant_inbox_engine",
       },
+      "GET /assistant/drafts": {
+        items: [
+          {
+            id: 42,
+            draft_type: "message",
+            channel: "whatsapp",
+            to_contact: "905551112233",
+            body: "Merhaba, belgeyi paylaşıyorum.",
+            approval_status: "pending",
+            delivery_status: "draft",
+            created_at: "2026-03-11T10:30:00Z",
+            updated_at: "2026-03-11T10:35:00Z",
+          },
+        ],
+        matter_drafts: [],
+        generated_from: "assistant_drafts_engine",
+      },
     });
 
-    renderApp(["/assistant?tool=workspace"], {
+    renderApp(["/workspace"], {
       storedSettings: {
         workspaceConfigured: true,
         workspaceRootName: "Tahliye Belgeleri",
       },
     });
 
-    await waitFor(() => expect(screen.getAllByText("Çalışma Alanı").length).toBeGreaterThan(0));
-    expect(screen.queryByText("Çalışma alanı araması")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Çalışma klasörünüzdeki belgeleri, taslakları ve ek veri kaynaklarını burada birlikte izleyin.")).toBeInTheDocument());
+    expect(screen.getAllByRole("button", { name: "Asistana dön" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Kurulumu aç" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("İletişim Taslakları")).toBeInTheDocument());
+    expect(screen.getByText("Sosyal Medya")).toBeInTheDocument();
+    expect(screen.getByText("Google Drive Dosyaları")).toBeInTheDocument();
+    const draftsCard = screen.getByText("İletişim Taslakları").closest(".hub-source-item");
+    expect(draftsCard).not.toBeNull();
+    expect(within(draftsCard as HTMLElement).getByText("1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Çalışma Paneli" })).not.toBeInTheDocument();
   });
 });

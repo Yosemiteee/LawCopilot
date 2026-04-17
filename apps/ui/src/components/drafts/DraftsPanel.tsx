@@ -103,6 +103,7 @@ export function DraftsPanel({ matterId, matterLabel }: { matterId: number; matte
             <label className="stack stack--tight">
               <span>Üretilecek taslak türü</span>
               <select className="select" name="generateDraftType" defaultValue="client_update">
+                <option value="petition">Dilekçe taslağı</option>
                 <option value="client_update">Müvekkil durum güncellemesi</option>
                 <option value="internal_summary">İç ekip özeti</option>
                 <option value="first_case_assessment">İlk dosya değerlendirmesi</option>
@@ -149,6 +150,7 @@ export function DraftsPanel({ matterId, matterLabel }: { matterId: number; matte
             <label className="stack stack--tight">
               <span>Taslak türü</span>
               <select className="select" name="draftType" defaultValue="client_update">
+                <option value="petition">Dilekçe taslağı</option>
                 <option value="client_update">Müvekkil durum güncellemesi</option>
                 <option value="internal_summary">İç ekip özeti</option>
                 <option value="first_case_assessment">İlk dosya değerlendirmesi</option>

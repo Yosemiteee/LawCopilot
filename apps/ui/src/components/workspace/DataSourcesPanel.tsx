@@ -1,4 +1,4 @@
-import type { EmailDraft, SocialEvent, WorkspaceOverviewResponse, GoogleIntegrationStatus } from "../../types/domain";
+import type { OutboundDraft, SocialEvent, WorkspaceOverviewResponse, GoogleIntegrationStatus } from "../../types/domain";
 
 type SourceSummary = {
   id: string;
@@ -21,13 +21,13 @@ function formatDate(iso?: string | null): string {
 }
 
 export function DataSourcesPanel({
-  emailDrafts,
+  assistantDrafts,
   socialEvents,
   workspaceOverview,
   googleStatus,
   loading,
 }: {
-  emailDrafts: EmailDraft[];
+  assistantDrafts: OutboundDraft[];
   socialEvents: SocialEvent[];
   workspaceOverview: WorkspaceOverviewResponse | null;
   googleStatus: GoogleIntegrationStatus | null;
@@ -45,11 +45,11 @@ export function DataSourcesPanel({
       emptyText: "Henüz belge taranmadı",
     },
     {
-      id: "emails",
-      label: "E-posta Taslakları",
-      count: emailDrafts.length,
-      lastActivity: emailDrafts[0]?.updated_at || emailDrafts[0]?.created_at,
-      emptyText: "E-posta taslağı yok",
+      id: "drafts",
+      label: "İletişim Taslakları",
+      count: assistantDrafts.length,
+      lastActivity: assistantDrafts[0]?.updated_at || assistantDrafts[0]?.created_at,
+      emptyText: "İletişim taslağı yok",
     },
     {
       id: "social",
@@ -65,11 +65,32 @@ export function DataSourcesPanel({
       lastActivity: googleStatus?.last_sync_at || undefined,
       emptyText: "Drive dosyası yok",
     },
+    {
+      id: "youtube",
+      label: "YouTube Oynatma Listeleri",
+      count: googleStatus?.youtube_playlist_count || 0,
+      lastActivity: googleStatus?.last_sync_at || undefined,
+      emptyText: "YouTube oynatma listesi yok",
+    },
+    {
+      id: "youtube-history",
+      label: "YouTube Geçmişi",
+      count: googleStatus?.youtube_history_count || 0,
+      lastActivity: googleStatus?.portability_last_sync_at || undefined,
+      emptyText: "YouTube geçmiş kaydı yok",
+    },
+    {
+      id: "browser-history",
+      label: "Tarayıcı Geçmişi",
+      count: googleStatus?.chrome_history_count || 0,
+      lastActivity: googleStatus?.portability_last_sync_at || undefined,
+      emptyText: "Tarayıcı geçmiş kaydı yok",
+    },
   ];
 
   return (
     <section className="hub-sources">
-      <h2 className="hub-section-title">Veri Kaynakları</h2>
+      <h2 className="hub-section-title">Kaynak özeti</h2>
       {loading ? (
         <p className="hub-empty-text">Yükleniyor…</p>
       ) : (
@@ -90,15 +111,12 @@ export function DataSourcesPanel({
         </div>
       )}
 
-      {/* Workspace folder info */}
       {workspaceOverview?.workspace ? (
         <div className="hub-sources__folder">
           <div className="hub-sources__folder-row">
-            <span className="hub-sources__folder-icon">📂</span>
             <div>
-              <span className="hub-source-item__label">
-                {workspaceOverview.workspace.display_name}
-              </span>
+              <span className="hub-source-item__label">Bağlı çalışma klasörü</span>
+              <strong style={{ display: "block", marginTop: "0.2rem" }}>{workspaceOverview.workspace.display_name}</strong>
               <span className="hub-source-item__meta" style={{ display: "block" }}>
                 {workspaceOverview.workspace.root_path}
               </span>

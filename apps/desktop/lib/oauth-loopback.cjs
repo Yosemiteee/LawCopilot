@@ -19,13 +19,16 @@ function waitForLoopbackCallback(redirectUri, options = {}) {
     String(options.errorMessage || "").trim()
     || "Bağlantı tamamlanamadı. LawCopilot uygulamasına dönüp tekrar deneyin.";
 
-  return new Promise((resolve, reject) => {
+  let cancel = () => {};
+
+  const promise = new Promise((resolve, reject) => {
     let settled = false;
     let timeoutId = null;
 
     function cleanup(server) {
       if (timeoutId) {
         clearTimeout(timeoutId);
+        timeoutId = null;
       }
       try {
         server.close();
@@ -58,6 +61,10 @@ function waitForLoopbackCallback(redirectUri, options = {}) {
       }
       settled = true;
       cleanup(server);
+      if (error && (error.code === "EADDRINUSE" || error.code === "EACCES")) {
+        reject(new Error("Yerel OAuth yönlendirme portu açılamadı. Tarayıcı girişini bitirdikten sonra yönlendirme adresini uygulamaya manuel yapıştırın."));
+        return;
+      }
       reject(error);
     });
 
@@ -71,7 +78,19 @@ function waitForLoopbackCallback(redirectUri, options = {}) {
         reject(new Error("Yerel OAuth yönlendirme süresi doldu."));
       }, timeoutMs);
     });
+
+    cancel = (reason = "Yerel OAuth yönlendirmesi iptal edildi.") => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup(server);
+      reject(new Error(String(reason || "Yerel OAuth yönlendirmesi iptal edildi.")));
+    };
   });
+
+  promise.cancel = (reason) => cancel(reason);
+  return promise;
 }
 
 module.exports = {

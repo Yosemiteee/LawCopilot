@@ -56,8 +56,8 @@ export function ConnectedAccountsCard({ health }: { health: Health | null }) {
       detail: health.google_account_label || undefined,
     },
     {
-      id: "calendar",
-      label: "Takvim",
+      id: "google-calendar",
+      label: "Google Takvim",
       status: resolveStatus(health.calendar_connected),
     },
     {
@@ -66,10 +66,33 @@ export function ConnectedAccountsCard({ health }: { health: Health | null }) {
       status: resolveStatus(health.drive_connected),
     },
     {
+      id: "outlook-mail",
+      label: "Outlook Mail",
+      status: resolveStatus(health.outlook_mail_connected),
+      detail: health.outlook_account_label || undefined,
+    },
+    {
+      id: "outlook-calendar",
+      label: "Outlook Takvim",
+      status: resolveStatus(health.outlook_calendar_connected),
+    },
+    {
       id: "telegram",
       label: "Telegram",
       status: resolveStatus(health.telegram_configured),
       detail: health.telegram_bot_username || undefined,
+    },
+    {
+      id: "whatsapp",
+      label: "WhatsApp",
+      status: resolveStatus(health.whatsapp_configured),
+      detail: health.whatsapp_account_label || undefined,
+    },
+    {
+      id: "x",
+      label: "X",
+      status: resolveStatus(health.x_configured),
+      detail: health.x_account_label || undefined,
     },
   ];
 

@@ -497,7 +497,10 @@ def generate_matter_draft(
         if item.get("factuality") == "factual"
     ][:3]
     risk_lines = [f"- {item['title']}: {item['details']}" for item in risk_notes.get("items", [])][:3]
-    document_lines = [f"- {doc['display_name']} ({doc['source_type']})" for doc in documents[:4]]
+    document_lines = [
+        f"- {doc.get('display_name') or doc.get('name') or 'Belge'} ({doc.get('source_type') or doc.get('type') or 'belge'})"
+        for doc in documents[:4]
+    ]
     open_task_lines = [f"- {task['title']}" for task in tasks if task.get("status") != "completed"][:3]
 
     context_summary = [
@@ -511,6 +514,12 @@ def generate_matter_draft(
     instructions_line = f"\nİnceleyen notu: {instructions}" if instructions else ""
 
     templates = {
+        "petition": (
+            f"Dilekçe taslağı: {matter['title']}",
+            "Dilekçe çalışma taslağı",
+            "Olgusal ve belgesel dayanak",
+            "Talep ve sonuç çerçevesi",
+        ),
         "client_update": (
             f"Müvekkil durum güncellemesi: {matter['title']}",
             "Müvekkile dönük çalışma taslağı",

@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "id": "user_preference_explicit_wins",
+      "claims": [
+        {
+          "id": "claim-inferred-preference",
+          "subject_key": "user",
+          "predicate": "communication_style",
+          "object_value_text": "Uzun ve detaylı cevaplar",
+          "scope": "personal",
+          "epistemic_basis": "inferred",
+          "validation_state": "pending"
+        },
+        {
+          "id": "claim-explicit-preference",
+          "subject_key": "user",
+          "predicate": "communication_style",
+          "object_value_text": "Kısa ve net cevaplar",
+          "scope": "personal",
+          "epistemic_basis": "user_explicit",
+          "validation_state": "user_confirmed"
+        }
+      ],
+      "resolve": {
+        "subject_key": "user",
+        "predicate": "communication_style",
+        "scope": "personal",
+        "include_blocked": true
+      },
+      "expect": {
+        "status": "current",
+        "current_claim_id": "claim-explicit-preference"
+      }
+    },
+    {
+      "id": "workspace_fact_connector_wins",
+      "claims": [
+        {
+          "id": "assistant-product-narrative",
+          "subject_key": "product:sku-42",
+          "predicate": "inventory.status",
+          "object_value_text": "Kırmızı beden stokta var",
+          "scope": "professional",
+          "epistemic_basis": "assistant_generated",
+          "validation_state": "pending",
+          "retrieval_eligibility": "quarantined",
+          "self_generated": true
+        },
+        {
+          "id": "connector-product-fact",
+          "subject_key": "product:sku-42",
+          "predicate": "inventory.status",
+          "object_value_text": "Kırmızı beden tükendi",
+          "scope": "professional",
+          "epistemic_basis": "connector_observed",
+          "validation_state": "source_supported"
+        }
+      ],
+      "resolve": {
+        "subject_key": "product:sku-42",
+        "predicate": "inventory.status",
+        "scope": "professional",
+        "include_blocked": true
+      },
+      "expect": {
+        "status": "current",
+        "current_claim_id": "connector-product-fact"
+      }
+    },
+    {
+      "id": "assistant_only_support_chain_is_contaminated",
+      "claims": [
+        {
+          "id": "assistant-seed",
+          "subject_key": "assistant_output:assistant_reply",
+          "predicate": "narrative",
+          "object_value_text": "Kırmızı beden tükendi olabilir",
+          "scope": "professional",
+          "epistemic_basis": "assistant_generated",
+          "validation_state": "pending",
+          "retrieval_eligibility": "quarantined",
+          "self_generated": true
+        },
+        {
+          "id": "derived-stock-claim",
+          "subject_key": "product:sku-42",
+          "predicate": "inventory.status",
+          "object_value_text": "Kırmızı beden tükendi",
+          "scope": "professional",
+          "epistemic_basis": "inferred",
+          "validation_state": "pending",
+          "metadata": {
+            "supporting_claim_ids": ["assistant-seed"]
+          }
+        }
+      ],
+      "resolve": {
+        "subject_key": "product:sku-42",
+        "predicate": "inventory.status",
+        "scope": "professional",
+        "include_blocked": true
+      },
+      "expect": {
+        "status": "contaminated",
+        "current_claim_id": "derived-stock-claim",
+        "support_contaminated": true,
+        "support_reason_code": "assistant_only_support_chain"
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:desktop": "npm run build && npm --prefix ../desktop run sync:ui",
     "preview": "vite preview",
     "test:locale": "node scripts/check-ui-turkish.cjs",
     "test": "npm run test:locale && vitest run"
