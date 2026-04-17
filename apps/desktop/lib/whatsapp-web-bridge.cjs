@@ -114,11 +114,30 @@ function sessionConflictProcesses(config) {
     return [];
   }
   try {
-    const result = spawnSync("pgrep", ["-af", userDataDir], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 2500,
-    });
+    const result = process.platform === "win32"
+      ? spawnSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-Command",
+          [
+            `$target = '${userDataDir.replace(/'/g, "''")}';`,
+            "Get-CimInstance Win32_Process",
+            "| Where-Object { $_.CommandLine -and $_.CommandLine.Contains($target) }",
+            '| ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }',
+          ].join(" "),
+        ],
+        {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 4000,
+        },
+      )
+      : spawnSync("pgrep", ["-af", userDataDir], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 2500,
+      });
     const currentPid = Number(process.pid || 0);
     return String(result.stdout || "")
       .split(/\r?\n/)
