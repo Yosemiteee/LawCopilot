@@ -1,117 +1,269 @@
 # LawCopilot
 
-LawCopilot, yerel-oncelikli, kaynak dayanakli, insan denetimli ve uyarlanabilir bir kisisel + is asistanidir.
+LawCopilot, yerel öncelikli, insan denetimli ve çok kaynaklı çalışan bir masaüstü asistandır. Amaç; kullanıcının belgelerine, kişisel tercihlerine, iletişim akışlarına ve bağlı servislerine kontrollü şekilde erişip tek bir asistan yüzeyinden iş yürütmektir.
 
-Bugünkü durum:
-- indirilebilir masaüstü kabuğu vardır
-- yerel backend gömülü ikili olarak paketlenebilir
-- kullanıcı bir çalışma klasörü seçer
-- uygulama yalnız bu klasör ve alt klasörlerine erişir
-- belge tarama, arama, benzer içerik bulma ve kaynak bağlama yerelde çalışır
-- günlük ajanda, önerilen aksiyonlar ve taslak + onay akışı aynı asistan yüzeyinde toplanır
-- Google Gmail, Google Takvim, Telegram ve Codex/OpenClaw hesap bağlantıları Ayarlar ekranından yönetilir
-- yeni `Integrations` yüzeyi platform-managed connector katalogu ve legacy baglanti envanterini birlikte gösterir
-- kullanıcıya görünen arayüz Türkçedir
+Bugünkü ürün yönü `assistant-first` modelidir:
+- ana çalışma yüzeyi `Asistan`
+- kişisel bilgiler `Ayarlar > Profil`
+- iletişim rehberi ve bildirim kuralları `Ayarlar > İletişim`
+- asistanın tonu ve davranışı `Ayarlar > Asistan`
+- hesaplar, sağlayıcılar ve entegrasyonlar `Ayarlar > Kurulum`
 
-## Ana özellikler
-- Çalışma alanı odaklı yerel hafıza
-- Çalışma klasörü kapsamlı yerel belge hafızası
-- Kaynak dayanaklı arama ve atıf görünümü
-- Tek tıkla belge görüntüleyici, alıntı atlama ve pasaj vurgulama
-- Dosya adı, içerik, belge türü, checksum ve klasör bağlamı ile açıklanabilir benzer içerik tespiti
-- Ajanda, görev, taslak ve takip akışları
-- Günlük ajanda, gelen iş sinyalleri ve önerilen aksiyonlar
-- Gmail/Takvim/Telegram sinyallerini görev ve çalışma verisiyle birleştiren asistan yüzeyi
-- Integrations katalogu, connector lifecycle, sync ve action yönetimi
-- Dikkat edilmesi gereken noktalar, eksik bilgi sinyalleri ve taslak önerileri
-- Taslak öncelikli, insan onaylı kullanım modeli
-- Windows ve macOS paketleme hattı
+## Ürün Özeti
 
-## Klasörler
-- `apps/api`: FastAPI tabanlı yerel backend
-- `apps/ui`: React + Vite tabanlı Türkçe çalışma masası
-- `apps/desktop`: Electron tabanlı masaüstü kabuğu
-- `apps/api/packaging`: PyInstaller tabanlı backend bundling araçları
-- `docs`: mimari, güvenlik, pilot kurulum ve kapsam belgeleri
-- `scripts`: test, smoke, paketleme ve release doğrulama scriptleri
-- `artifacts`: yerel veritabanı, günlükler ve geçici çalışma çıktıları
+LawCopilot şu işleri birlikte yapar:
+- çalışma alanındaki belgeleri tarar, indeksler, arar ve benzer belge bulur
+- kullanıcı profili, tercihler ve kaynak kuralları gibi kalıcı bilgileri saklar
+- WhatsApp, Telegram, e-posta, takvim ve sosyal medya gibi bağlı kaynaklardan canlı veri okuyabilir
+- taslak, görev, takip, araştırma ve onay akışlarını tek asistan yüzeyinde yürütür
+- öneriyi doğrudan aksiyona bağlamaya çalışır: taslak hazırla, mesaj öner, rota çıkar, araştırma yap, benzer belge bul
 
-## Varsayılan güvenlik duruşu
-- varsayılan çalışma modu `local-only`
-- çalışma klasörü seçmeden belge ekranları kullanılmaz
-- disk kökü ve sistem klasörleri reddedilir
-- kullanıcı klasörünün tamamı reddedilir
-- ağ paylaşımları ve klasör dışı erişim engellenir
-- bağlayıcılar varsayılan olarak temkinli modda tutulur
+## Bugünkü Bilgi Mimarisi
+
+Sistemde birden fazla bilgi yolu vardır. Bunlar aynı şey değildir ve farklı işlerde kullanılır.
+
+### 1. Canlı araçlar ve senkron veriler
+
+Güncel mesaj, e-posta, takvim, sosyal medya ve dış kaynak verileri için kullanılır.
+
+Örnek:
+- WhatsApp'ta son mesajlar
+- Telegram'da belirli kişiyle son konuşma
+- X mention veya DM durumu
+- bağlı veri kaynaklarında güncel kayıtlar
+
+Bu katman tazelik ister. Burada amaç eski hafızayı değil, güncel snapshot veya canlı sync verisini kullanmaktır.
+
+### 2. Profil ve kişisel hafıza
+
+Kullanıcının kendisiyle ilgili kalıcı bilgiler burada tutulur.
+
+Örnek:
+- sana nasıl hitap edilsin
+- nerede yaşıyorsun
+- ulaşım, seyahat, yemek, alışveriş tercihlerin
+- hangi site veya sağlayıcıları tercih ettiğin
+- önemli tarihler
+
+Bu bilgiler `Ayarlar > Profil` içinde yönetilir.
+
+### 3. İletişim hafızası
+
+Kişiler ve gruplar için ayrı bir rehber tutulur. Bu katman kullanıcı profiliyle aynı şey değildir.
+
+Burada şu tür bilgiler tutulur:
+- kişi adı, kayıtlı isim, numara, e-posta, handle
+- hangi kanallarda görüldüğü
+- detaylı açıklama ve çıkarılan notlar
+- izleme, engelleme ve anahtar kelime uyarıları
+- kullanıcı isterse manuel düzenlenen iletişim açıklamaları
+
+Bu bilgiler `Ayarlar > İletişim` içindedir.
+
+### 4. Workspace belge retrieval
+
+Belgeler ve eski işler için belge tabanlı erişim yolu kullanılır.
+
+Örnek:
+- buna benzer bir dilekçe var mı
+- şu belge içinde bu konu geçiyor mu
+- aynı klasörde benzer içerikler neler
+
+Bu katman klasik sohbet hafızasından ayrı çalışır; belge parçaları, benzerlik ve dayanak odaklıdır.
+
+### 5. Gelişmiş bilgi tabanı
+
+Sistemde claim, artifact, dayanak ve derlenmiş bilgi katmanları vardır. Bu katman asistanın iç karar mekanizmasına destek verir. Günlük kullanıcı yüzeyinde ana navigasyon parçası değildir; daha çok sistemsel ve ileri düzey inceleme içindir.
+
+## Kullanıcı Yüzeyleri
+
+### Asistan
+
+Ana yüzeydir. Kullanıcı burada:
+- sohbet eder
+- soru sorar
+- belge, görev, taslak ve araştırma akışlarını tetikler
+- canlı araçlardan gelen bilgiyi ister
+- onay gerektiren taslak ve aksiyonları yönetir
+
+### Çalışma Alanı
+
+Seçilen klasör altındaki belge havuzunu gösterir.
+
+Burada:
+- klasör tarama
+- belge listesi
+- arama
+- benzer belge bulma
+- belge içeriğine atlama
+- dosya bağlamı üzerinden çalışma
+yapılır.
+
+### Ayarlar > Profil
+
+Kullanıcının kişisel ve kalıcı bilgileri burada tutulur.
+
+Örnek alanlar:
+- ad / hitap bilgisi
+- konum ve yaşam noktası
+- ulaşım, seyahat, yemek ve hava tercihleri
+- kaynak ve site tercihleri
+- önemli tarihler
+
+### Ayarlar > İletişim
+
+İletişim yönetiminin merkezi burasıdır.
+
+İçerik:
+- iletişim rehberi
+- yakın kişiler
+- izlenen kişi ve gruplar
+- anahtar kelime uyarıları
+- engellenen kişi ve gruplar
+
+Kural:
+- yakın kişiler artık otomatik yaratılmaz
+- kullanıcı manuel ekler
+- sistem mevcut iletişim profillerini veri geldikçe zenginleştirir
+
+### Ayarlar > Asistan
+
+Bu sekme hafıza yönetmez; asistan davranışını yönetir.
+
+Burada:
+- asistan adı
+- ton
+- çekirdek rol özeti
+- davranış notları
+- çalışma biçimi
+tanımlanır.
+
+Örnek:
+- `Kısa ve net ol`
+- `Daha proaktif davran`
+- `Bana esprili hitap et`
+
+Bu tür veriler kullanıcı profiline değil, asistan runtime profiline yazılır.
+
+### Ayarlar > Kurulum
+
+Kurulum ve entegrasyonların merkezi burasıdır.
+
+Bugünkü kurulum grupları:
+- yapay zeka sağlayıcısı
+- Google ve Outlook
+- Telegram ve WhatsApp
+- X, Instagram ve LinkedIn
+- Elastic ve diğer veri kaynakları
+- masaüstü güncelleme ve workspace seçimi
+
+## Entegrasyonlar
+
+Repo ve ürün yüzeyinde şu bağlantılar bulunur:
+- OpenAI / Codex / OpenAI uyumlu API / Ollama
+- Google Gmail
+- Google Takvim
+- Outlook
+- Telegram
+- WhatsApp
+- X
+- Instagram
+- LinkedIn
+- Elastic
+- PostgreSQL
+- MySQL
+- MSSQL
+
+Not:
+- Her entegrasyon aynı derinlikte değildir.
+- Bazıları tam okuma/yazma akışına sahiptir, bazıları daha çok senkron veya snapshot odaklıdır.
+- Canlı veri yetkileri sağlayıcı izinlerine ve hesap kapsamlarına bağlıdır.
+
+## Güvenlik Duruşu
+
+Varsayılan güvenlik modeli temkinlidir:
+- varsayılan mod `local-only`
+- çalışma klasörü seçmeden belge odaklı yüzeyler açılmaz
+- disk kökü, sistem klasörleri ve kullanıcı klasörünün tamamı reddedilir
+- klasör dışı erişim engellenir
 - dış iletişim otomatik gönderilmez
+- taslak ve onay akışları insan denetimli çalışır
 
-Ayrıntılar için:
-- [WORKSPACE_SECURITY_MODEL.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/WORKSPACE_SECURITY_MODEL.md)
-- [SECURITY.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/SECURITY.md)
+Ayrıntılar:
+- [WORKSPACE_SECURITY_MODEL.md](docs/WORKSPACE_SECURITY_MODEL.md)
+- [SECURITY.md](docs/SECURITY.md)
+
+## Mimari Bileşenler
+
+- `apps/api`: FastAPI tabanlı yerel backend
+- `apps/ui`: React + Vite tabanlı kullanıcı arayüzü
+- `apps/desktop`: Electron tabanlı masaüstü kabuğu
+- `apps/api/packaging`: backend bundling araçları
+- `docs`: mimari, güvenlik, sınırlar ve release belgeleri
+- `scripts`: test, smoke, paketleme ve pilot scriptleri
+- `artifacts`: yerel runtime çıktıları, loglar ve geçici veriler
+
+## Nasıl Çalışır
+
+Tipik karar akışı şudur:
+1. Kullanıcının niyeti çözülür.
+2. İstenen şeyin canlı veri mi, kalıcı hafıza mı, yoksa belge retrieval mı olduğu belirlenir.
+3. Gerekirse doğru araç veya veri kaynağı çağrılır.
+4. Profil, iletişim hafızası ve workspace bağlamı yardımcı veri olarak eklenir.
+5. Sonuç sentezlenir ve gerekirse taslak / aksiyon önerisine çevrilir.
+
+Bu nedenle sistem yalnız klasik RAG mantığına dayanmaz. Canlı araçlar, profil hafızası, iletişim hafızası ve belge retrieval birlikte kullanılır.
 
 ## Geliştirme
 
 ### Backend testleri
+
 ```bash
 cd apps/api
 .venv/bin/python -m pytest -q tests
 ```
 
 ### Arayüz testleri
+
 ```bash
 cd apps/ui
 npm test
 npm run build
 ```
 
-`npm test` şunları birlikte çalıştırır:
-- Türkçe arayüz guard kontrolü
-- route ve onboarding testleri
-- temel assistant ve workbench smoke testleri
+### Masaüstü smoke testleri
 
-### Masaüstü smoke testi
 ```bash
 cd apps/desktop
 npm test
 ```
 
-`npm test` şunları birlikte çalıştırır:
-- desktop backend boot smoke
-- çalışma klasörü güvenlik smoke testi
-- packaged runtime config smoke testi
+## Yerel Pilot Hazırlığı
 
-## Yerel pilot hazırlığı
 ```bash
 ./scripts/pilot_local.sh --mode local-only
 ```
 
-Bu komut şunları hazırlar:
-- backend sanal ortamı
-- arayüz build çıktısı
-- masaüstü bağımlılıkları
-- `artifacts/runtime/pilot.env`
+Bu akış:
+- backend sanal ortamını
+- arayüz build çıktısını
+- masaüstü bağımlılıklarını
+- pilot runtime ortamını
+hazırlar.
 
 ## Paketleme
 
-İlk açılış davranışı:
-1. uygulama doğrudan başlangıç akışına girer
-2. kullanıcı çalışma klasörü seçmeden ana workbench açılmaz
-3. çalışma klasörü seçildikten sonra giriş ekranı `Çalışma Alanı` olur
-
 ### Windows
+
 ```bash
 ./scripts/package_windows.sh
 ```
 
 Beklenen çıktı:
 - `apps/desktop/dist/LawCopilot-<surum>-windows-x64.exe`
-- `artifacts/windows-build-artifacts.json` veya CI içindeki Windows build manifesti
-
-GitHub indirilebilir sürüm:
-- Etiketli release'lerde Windows kurulum dosyası GitHub `Releases` sayfasına yüklenir.
-- İndirilebilir son kurulum için repo içindeki `Releases` bölümünü kullanın.
 
 ### macOS
+
 ```bash
 ./scripts/package_macos.sh
 ```
@@ -119,76 +271,32 @@ GitHub indirilebilir sürüm:
 Beklenen çıktılar:
 - `apps/desktop/dist/LawCopilot-<surum>-mac-universal.dmg`
 - `apps/desktop/dist/LawCopilot-<surum>-mac-universal.zip`
-- `artifacts/macos-build-artifacts.json` veya CI içindeki macOS build manifesti
 
 Not:
-- macOS tarafında gerçek notarization ve imzalama bu repoda yapılandırılabilir, ancak kimlik bilgileri gerektirir
+- macOS notarization ve imzalama ayrı kimlik bilgileri ister
 - Windows tarafında kod imzası yoksa SmartScreen uyarısı görülebilir
 
-## Önemli API yüzeyleri
-- `GET /workspace`
-- `PUT /workspace`
-- `POST /workspace/scan`
-- `GET /workspace/scan-jobs`
-- `GET /workspace/documents`
-- `POST /workspace/search`
-- `POST /workspace/similar-documents`
-- `POST /matters/{matter_id}/documents/attach-from-workspace`
-- `GET /matters/{matter_id}/workspace-documents`
-- `GET /integrations/catalog`
-- `POST /integrations/connections`
-- `POST /integrations/connections/{id}/sync`
-- `POST /integrations/scaffold`
+## Kısa Kullanım Akışı
 
-## Kısa ürün akışı
-1. Masaüstü uygulamayı aç
-2. Çalışma klasörü seç
-3. Klasörü tara
-4. Belgeleri listele, klasör bazlı arama yap ve benzer içerikleri bul
-5. Ayarlar ekranindan legacy OAuth baglantilarini, `Integrations` ekranindan ise yeni connector katalogunu yonet
-6. Asistan ekranında günün ajandasını ve önerilen aksiyonları incele
-7. Dikkat edilmesi gereken noktaları, eksik bilgi sinyallerini ve taslak önerilerini incele
-8. Gerekli belgeleri veya notları çalışma bağlamına ekle
-9. Arama sonucu, benzer içerik sonucu veya taslak bağlamından ilgili belgeye tek tıkla git
-10. Görev, taslak, takip ve bilgi derleme akışlarını yürüt
+1. Masaüstü uygulamayı aç.
+2. Workspace seç.
+3. `Ayarlar > Kurulum` içinden sağlayıcı ve bağlantıları tamamla.
+4. `Ayarlar > Profil` içinden kişisel bilgilerini ve tercihlerini gir.
+5. `Ayarlar > İletişim` içinden izleme/engel/keyword kurallarını düzenle.
+6. `Asistan` ekranında soru sor, araştırma yap, taslak oluştur veya belge bul.
+7. Gerekirse `Çalışma Alanı` ekranından belgeye in, benzer içeriği aç veya dosyayı bağlama ekle.
 
-## Çalışma alanı ve bağlam ilişkisi
-- Çalışma alanı, seçilen klasör altındaki yerel belge havuzudur.
-- Legacy `matter/dosya` yüzeyleri hâlâ repoda vardır; bunlar proje veya iş bağlamı gibi düşünülebilir.
-- Bir çalışma alanı belgesi bir veya daha fazla bağlama bağlanabilir.
-- Benzer içerik tespiti ve klasör bazlı arama önce çalışma alanında yapılır; daha derin çalışma bağlı kayıtlar üzerinden devam eder.
+## Sınırlar ve Tasarım Kararları
 
-## Kaynak dayanaklı inceleme akışı
-1. Çalışma Alanı veya Belgeler ekranında arama yapın.
-2. Dayanak pasaj veya benzer dosya sonucundaki `Belgedeki yeri aç` eylemini kullanın.
-3. Belge görüntüleyici seçili parçayı vurgular, yakın bağlamı gösterir ve parça gezgini ile ilerlemenizi sağlar.
-4. Masaüstü uygulamasında çalışıyorsanız aynı ekrandan belgeyi sistem uygulamasında açabilir veya klasörde gösterebilirsiniz.
+- Sistem `assistant-first` ilerler; legacy hukuk/matter yüzeyleri repoda bulunabilir ama ana ürün yönü bunlar değildir.
+- Gelişmiş hafıza ve epistemik katman sistemde vardır; ancak günlük kullanıcı navigasyonunda ana yüzey yapılmamıştır.
+- İletişim ve kişisel profil ayrı tutulur; biri kullanıcının kendisi, diğeri çevresindeki kişi ve gruplardır.
+- Araç kullanımı ile hafıza kullanımı aynı şey değildir. Güncel mesaj ve güncel sosyal medya verisi için doğrudan araç/snapshot yolu tercih edilir.
 
-## İlk kurulum için kısa kullanıcı metni
-- Uygulamayı açın.
-- İstediğiniz alt klasörü seçin.
-- Başlangıç model profilini seçin.
-- İsterseniz Codex sağlayıcısını, Google Gmail/Takvim bağlantısını ve Telegram bot bağlantısını kaydedin.
-- Disk kökü, sistem klasörleri ve kullanıcı klasörünün tamamı güvenlik nedeniyle kabul edilmez.
-- İlk tarama bitince `Çalışma Alanı` ekranı açılır.
-- Günün öncelikleri, açık onay isteyen taslaklar ve bekleyen iletişimler `Asistan` ekranında görünür.
+## İlgili Belgeler
 
-## Pilot sınırı
-- Başlangıç model profili masaüstü yapılandırmasına kaydedilir ve uygulama açılışında varsayılan yönlendirme politikası olarak kullanılır.
-- OpenAI hesabı için tarayıcı tabanlı Codex oturumu, OpenAI API, OpenAI uyumlu uç nokta ve yerel Ollama için masaüstü onboarding vardır; ayarlar yerel masaüstü yapılandırmasına kaydedilir.
-- Google Gmail ve Google Takvim için masaüstü OAuth onboarding vardır; bağlantı durumları Ayarlar ve Çekirdek ekranında görünür.
-- `Integrations` ekranı legacy masaustu baglantilarini katalogta gorunur kilarken yeni platform-managed connector'lar icin ortak lifecycle sunar.
-- Telegram bot tokeni ve izinli kullanıcı kimliği için masaüstü onboarding vardır; istenirse test mesajı atılabilir.
-- OpenAI hesabınız Google ile bağlıysa tarayıcıda açılan giriş ekranında Google seçeneğiyle devam edebilirsiniz. Codex oturumu seçilen modeli yerel masaüstü ayarına kaydeder.
-- Ayrı `E-posta Taslakları` ve `Sosyal Medya` ürün yüzeyi kaldırılmıştır; dış aksiyonlar `Asistan` ve `Taslaklar` ekranlarından yürür.
-
-## Not
-- Repo içinde hâlâ hukuk odaklı veya `matter/dosya` isimleri taşıyan legacy yüzeyler vardır.
-- Bu branch'teki yön artık daha genel amaçlı, uyarlanabilir bir asistana doğrudur; yeni değişiklikler assistant-first yaklaşımı izlemelidir.
-
-## İlgili belgeler
-- [ARCHITECTURE.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/ARCHITECTURE.md)
-- [INTEGRATIONS_PLATFORM.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/INTEGRATIONS_PLATFORM.md)
-- [BOUNDARY_DECISIONS.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/BOUNDARY_DECISIONS.md)
-- [PILOT_INSTALL_GUIDE.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/PILOT_INSTALL_GUIDE.md)
-- [V1_RELEASE_CRITERIA.md](/home/sami/openclaw-safe/openclaw-docker-secure/workspace/lawcopilot/docs/V1_RELEASE_CRITERIA.md)
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [INTEGRATIONS_PLATFORM.md](docs/INTEGRATIONS_PLATFORM.md)
+- [BOUNDARY_DECISIONS.md](docs/BOUNDARY_DECISIONS.md)
+- [PILOT_INSTALL_GUIDE.md](docs/PILOT_INSTALL_GUIDE.md)
+- [V1_RELEASE_CRITERIA.md](docs/V1_RELEASE_CRITERIA.md)
