@@ -1341,6 +1341,15 @@ describe("SettingsPage", () => {
   it("lets the user edit and save reminder automation rules manually", async () => {
     installSettingsCoreFetches();
     const saveStoredConfig = vi.fn(async (patch: Record<string, unknown>) => patch);
+    const expectedReminderAt = (() => {
+      const parsed = new Date("2026-04-17T12:50");
+      const offsetMinutes = -parsed.getTimezoneOffset();
+      const sign = offsetMinutes >= 0 ? "+" : "-";
+      const absoluteOffset = Math.abs(offsetMinutes);
+      const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, "0");
+      const offsetRemainder = String(absoluteOffset % 60).padStart(2, "0");
+      return `2026-04-17T12:50:00${sign}${offsetHours}:${offsetRemainder}`;
+    })();
 
     renderApp(["/settings?tab=automation"], {
       desktop: {
@@ -1373,7 +1382,9 @@ describe("SettingsPage", () => {
     await screen.findByDisplayValue("Su iç");
     fireEvent.change(screen.getByLabelText("Kısa başlık"), { target: { value: "Su içmeyi unutma" } });
     fireEvent.change(screen.getByLabelText("Açıklama"), { target: { value: "12 50 de su içmeyi hatırlat" } });
-    fireEvent.change(screen.getByDisplayValue("2026-04-17T12:48"), { target: { value: "2026-04-17T12:50" } });
+    const reminderDateInput = document.querySelector<HTMLInputElement>('input[type="datetime-local"]');
+    expect(reminderDateInput).not.toBeNull();
+    fireEvent.change(reminderDateInput!, { target: { value: "2026-04-17T12:50" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "Aktif" }));
     fireEvent.click(screen.getByRole("button", { name: "Otomasyonu kaydet" }));
 
@@ -1385,7 +1396,7 @@ describe("SettingsPage", () => {
             id: "rule-water",
             summary: "Su içmeyi unutma",
             instruction: "12 50 de su içmeyi hatırlat",
-            reminder_at: "2026-04-17T12:50:00+03:00",
+            reminder_at: expectedReminderAt,
             active: false,
           }),
         ],
