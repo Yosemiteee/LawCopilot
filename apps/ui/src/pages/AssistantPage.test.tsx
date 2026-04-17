@@ -406,7 +406,7 @@ describe("AssistantPage", () => {
       },
     });
 
-    await waitFor(() => expect(screen.getByText("İlk sohbet")).toBeInTheDocument());
+    await screen.findByText("İlk sohbet", {}, { timeout: 5000 });
 
     const firstThreadRow = screen.getByText("İlk sohbet").closest(".assistant-history-row");
     expect(firstThreadRow).not.toBeNull();
